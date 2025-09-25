@@ -177,6 +177,10 @@ public class DanteConfigService {
                     return false;
             }
             
+            // Actualizar singleton en RAM antes de guardar
+            ConfigUtil.updateConfigInMemory(config);
+            System.out.println("Propiedad '" + property + "' actualizada en RAM");
+            
             return saveConfig(config);
         }
         return false;
@@ -190,6 +194,11 @@ public class DanteConfigService {
         if (configOpt.isPresent()) {
             DanteConfig config = configOpt.get();
             config.addChannel(new Channel(name, enabled));
+            
+            // Actualizar singleton en RAM antes de guardar
+            ConfigUtil.updateConfigInMemory(config);
+            System.out.println("Nuevo canal '" + name + "' añadido en RAM");
+            
             return saveConfig(config);
         }
         return false;
@@ -222,6 +231,11 @@ public class DanteConfigService {
             DanteConfig config = configOpt.get();
             boolean success = config.updateChannelById(id, name, enabled);
             if (success) {
+                // Primero actualizar el singleton en RAM
+                ConfigUtil.updateConfigInMemory(config);
+                System.out.println("Canal ID " + id + " actualizado en RAM");
+                
+                // Luego guardar en archivo (saveConfig también actualiza RAM pero es buena práctica)
                 return saveConfig(config);
             }
         }
@@ -237,6 +251,10 @@ public class DanteConfigService {
             DanteConfig config = configOpt.get();
             boolean success = config.removeChannelById(id);
             if (success) {
+                // Actualizar singleton en RAM antes de guardar
+                ConfigUtil.updateConfigInMemory(config);
+                System.out.println("Canal ID " + id + " eliminado de RAM");
+                
                 return saveConfig(config);
             }
         }
@@ -269,6 +287,11 @@ public class DanteConfigService {
                 if (enabled != null) {
                     channel.setEnabled(enabled);
                 }
+                
+                // Actualizar singleton en RAM antes de guardar
+                ConfigUtil.updateConfigInMemory(config);
+                System.out.println("Canal índice " + index + " actualizado en RAM");
+                
                 return saveConfig(config);
             }
         }
