@@ -42,8 +42,7 @@ class DanteConfigServiceTest {
         configService.createDefaultConfig();
         
         // Actualizar una propiedad
-        boolean success = configService.updateConfigProperty("server", "192.168.1.200");
-        assertTrue(success);
+        configService.updateConfigProperty("server", "192.168.1.200");
         
         // Verificar que se actualizó
         Optional<DanteConfig> config = configService.readConfig();
@@ -57,8 +56,7 @@ class DanteConfigServiceTest {
         configService.createDefaultConfig();
         
         // Añadir un canal
-        boolean added = configService.addChannel("Test Channel", true);
-        assertTrue(added);
+        configService.addChannel("Test Channel", true);
         
         // Verificar que se añadió
         Optional<DanteConfig> config = configService.readConfig();
@@ -66,8 +64,8 @@ class DanteConfigServiceTest {
         assertEquals(4, config.get().getChannels().size());
         
         // Actualizar el canal por ID
-        boolean updated = configService.updateChannelById(4, "Updated Channel", false);
-        assertTrue(updated);
+        configService.updateChannelById(4, "Updated Channel", false);
+        // No assertion on return value since the method returns void
         
         // Verificar la actualización
         Channel updatedChannel = configService.getChannelById(4);
@@ -76,8 +74,7 @@ class DanteConfigServiceTest {
         assertFalse(updatedChannel.isEnabled());
         
         // Eliminar canal por ID
-        boolean removed = configService.removeChannelById(4);
-        assertTrue(removed);
+        configService.removeChannelById(4);
         
         // Verificar que se eliminó
         Channel deletedChannel = configService.getChannelById(4);

@@ -3,6 +3,8 @@ package com.example.DanteClient.data.controller;
 import com.example.DanteClient.data.model.DanteConfig;
 import com.example.DanteClient.data.model.Channel;
 import com.example.DanteClient.data.service.DanteConfigService;
+import com.example.DanteClient.data.exception.ConfigExceptions;
+import com.example.DanteClient.data.dto.SuccessResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -33,37 +35,37 @@ public class DanteConfigController {
      * Actualiza la configuración completa
      */
     @PutMapping
-    public ResponseEntity<String> updateConfig(@RequestBody DanteConfig config) {
-        boolean success = configService.saveConfig(config);
-        if (success) {
-            return ResponseEntity.ok("Configuración actualizada exitosamente");
-        } else {
-            return ResponseEntity.internalServerError()
-                    .body("Error al actualizar la configuración");
-        }
+    public ResponseEntity<SuccessResponse> updateConfig(@RequestBody DanteConfig config) {
+        // El service lanzará excepciones que serán manejadas por ConfigExceptionHandler
+        configService.saveConfig(config);
+        return ResponseEntity.ok(new SuccessResponse("Configuración actualizada exitosamente", config));
     }
     
     /**
      * Actualiza una propiedad específica de la configuración
      */
     @PatchMapping("/property/{propertyName}")
-    public ResponseEntity<String> updateProperty(
+    public ResponseEntity<SuccessResponse> updateProperty(
             @PathVariable String propertyName,
             @RequestBody Map<String, Object> payload) {
         
         Object value = payload.get("value");
         if (value == null) {
-            return ResponseEntity.badRequest()
-                    .body("El campo 'value' es requerido");
+            throw new ConfigExceptions.InvalidConfigValueException("value", null, "non-null value");
         }
         
-        boolean success = configService.updateConfigProperty(propertyName, value);
-        if (success) {
-            return ResponseEntity.ok("Propiedad '" + propertyName + "' actualizada exitosamente");
-        } else {
-            return ResponseEntity.badRequest()
-                    .body("Error al actualizar la propiedad '" + propertyName + "'");
-        }
+        // El service lanzará excepciones que serán manejadas por ConfigExceptionHandler
+        configService.updateConfigProperty(propertyName, value);
+        
+        Map<String, Object> responseData = Map.of(
+            "property", propertyName,
+            "newValue", value
+        );
+        
+        return ResponseEntity.ok(new SuccessResponse(
+            "Propiedad '" + propertyName + "' actualizada exitosamente", 
+            responseData
+        ));
     }
     
     /**
@@ -79,14 +81,22 @@ public class DanteConfigController {
      * Añade un nuevo canal
      */
     @PostMapping("/channels")
-    public ResponseEntity<String> addChannel(@RequestBody Channel channel) {
-        boolean success = configService.addChannel(channel.getName(), channel.isEnabled());
-        if (success) {
-            return ResponseEntity.ok("Canal agregado exitosamente");
-        } else {
-            return ResponseEntity.internalServerError()
-                    .body("Error al agregar el canal");
+    public ResponseEntity<SuccessResponse> addChannel(@RequestBody Channel channel) {
+        // Validaciones básicas
+        if (channel.getName() == null || channel.getName().trim().isEmpty()) {
+            throw new ConfigExceptions.InvalidChannelDataException("name", "El nombre del canal no puede estar vacío");
         }
+        
+        // El service lanzará excepciones que serán manejadas por ConfigExceptionHandler
+        configService.addChannel(channel.getName(), channel.isEnabled());
+        
+        Map<String, Object> responseData = Map.of(
+            "channelName", channel.getName(),
+            "enabled", channel.isEnabled(),
+            "action", "created"
+        );
+        
+        return ResponseEntity.ok(new SuccessResponse("Canal agregado exitosamente", responseData));
     }
     
     /**
@@ -98,7 +108,7 @@ public class DanteConfigController {
         if (channel != null) {
             return ResponseEntity.ok(channel);
         } else {
-            return ResponseEntity.notFound().build();
+            throw new ConfigExceptions.ChannelNotFoundException(id);
         }
     }
     
@@ -106,47 +116,76 @@ public class DanteConfigController {
      * Actualiza un canal específico por ID
      */
     @PutMapping("/channels/{id}")
-    public ResponseEntity<String> updateChannelById(
+    public ResponseEntity<SuccessResponse> updateChannelById(
             @PathVariable int id,
             @RequestBody Channel channel) {
         
-        boolean success = configService.updateChannelById(id, channel.getName(), channel.isEnabled());
-        if (success) {
-            return ResponseEntity.ok("Canal con ID " + id + " actualizado exitosamente");
-        } else {
-            return ResponseEntity.badRequest()
-                    .body("Error al actualizar el canal con ID " + id + ". Puede que no exista.");
+        // Validaciones básicas
+        if (channel.getName() != null && channel.getName().trim().isEmpty()) {
+            throw new ConfigExceptions.InvalidChannelDataException("name", "El nombre del canal no puede estar vacío");
         }
+        
+        // El service lanzará excepciones que serán manejadas por ConfigExceptionHandler
+        configService.updateChannelById(id, channel.getName(), channel.isEnabled());
+        
+        Map<String, Object> responseData = Map.of(
+            "channelId", id,
+            "updatedName", channel.getName() != null ? channel.getName() : "unchanged",
+            "updatedEnabled", channel.isEnabled(),
+            "action", "updated"
+        );
+        
+        return ResponseEntity.ok(new SuccessResponse(
+            "Canal con ID " + id + " actualizado exitosamente", 
+            responseData
+        ));
     }
     
     /**
      * Elimina un canal por ID
      */
     @DeleteMapping("/channels/{id}")
-    public ResponseEntity<String> removeChannelById(@PathVariable int id) {
-        boolean success = configService.removeChannelById(id);
-        if (success) {
-            return ResponseEntity.ok("Canal con ID " + id + " eliminado exitosamente");
-        } else {
-            return ResponseEntity.badRequest()
-                    .body("Error al eliminar el canal con ID " + id + ". Puede que no exista.");
-        }
+    public ResponseEntity<SuccessResponse> removeChannelById(@PathVariable int id) {
+        // El service lanzará excepciones que serán manejadas por ConfigExceptionHandler
+        configService.removeChannelById(id);
+        
+        Map<String, Object> responseData = Map.of(
+            "channelId", id,
+            "action", "deleted"
+        );
+        
+        return ResponseEntity.ok(new SuccessResponse(
+            "Canal con ID " + id + " eliminado exitosamente", 
+            responseData
+        ));
     }
     
     /**
      * Reinicia la configuración a los valores por defecto
      */
     @PostMapping("/reset")
-    public ResponseEntity<String> resetConfig() {
-        configService.createDefaultConfig();
-        return ResponseEntity.ok("Configuración reiniciada a valores por defecto");
+    public ResponseEntity<SuccessResponse> resetConfig() {
+        DanteConfig defaultConfig = configService.createDefaultConfig();
+        return ResponseEntity.ok(new SuccessResponse(
+            "Configuración reiniciada a valores por defecto", 
+            defaultConfig
+        ));
     }
     
     /**
      * Endpoint de prueba para verificar que el servicio está funcionando
      */
     @GetMapping("/status")
-    public ResponseEntity<String> getStatus() {
-        return ResponseEntity.ok("Servicio de configuración Dante funcionando correctamente");
+    public ResponseEntity<SuccessResponse> getStatus() {
+        Map<String, Object> statusData = Map.of(
+            "service", "DanteConfigService",
+            "status", "active",
+            "version", "1.0.0"
+        );
+        
+        return ResponseEntity.ok(new SuccessResponse(
+            "Servicio de configuración Dante funcionando correctamente", 
+            statusData
+        ));
     }
 }

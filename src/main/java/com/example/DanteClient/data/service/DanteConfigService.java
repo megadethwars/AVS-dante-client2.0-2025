@@ -3,6 +3,7 @@ package com.example.DanteClient.data.service;
 import com.example.DanteClient.data.model.DanteConfig;
 import com.example.DanteClient.data.model.Channel;
 import com.example.DanteClient.data.util.ConfigUtil;
+import com.example.DanteClient.data.exception.ConfigExceptions;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.springframework.core.io.ClassPathResource;
@@ -121,7 +122,7 @@ public class DanteConfigService {
     /**
      * Guarda la configuración en el archivo JSON y actualiza RAM
      */
-    public boolean saveConfig(DanteConfig config) {
+    public void saveConfig(DanteConfig config) {
         try {
             // Crear directorios padre si no existen
             Files.createDirectories(configFilePath.getParent());
@@ -132,21 +133,24 @@ public class DanteConfigService {
             // Sincronizar con RAM para lectura rápida
             ConfigUtil.updateConfigInMemory(config);
             
-            return true;
         } catch (IOException e) {
             System.err.println("Error al guardar la configuración: " + e.getMessage());
-            return false;
+            throw new ConfigExceptions.ConfigFileWriteException(configFilePath.toString(), e);
         }
     }
     
     /**
      * Actualiza una propiedad específica de la configuración
      */
-    public boolean updateConfigProperty(String property, Object value) {
+    public void updateConfigProperty(String property, Object value) {
         Optional<DanteConfig> configOpt = readConfig();
-        if (configOpt.isPresent()) {
-            DanteConfig config = configOpt.get();
-            
+        if (configOpt.isEmpty()) {
+            throw new ConfigExceptions.ConfigNotInitializedException();
+        }
+        
+        DanteConfig config = configOpt.get();
+        
+        try {
             switch (property.toLowerCase()) {
                 case "server":
                     config.setServer((String) value);
@@ -173,92 +177,102 @@ public class DanteConfigService {
                     config.setFrequency((Integer) value);
                     break;
                 default:
-                    System.err.println("Propiedad no reconocida: " + property);
-                    return false;
+                    throw new ConfigExceptions.InvalidConfigPropertyException(property);
             }
-            
-            // Actualizar singleton en RAM antes de guardar
-            ConfigUtil.updateConfigInMemory(config);
-            System.out.println("Propiedad '" + property + "' actualizada en RAM");
-            
-            return saveConfig(config);
+        } catch (ClassCastException e) {
+            throw new ConfigExceptions.InvalidConfigValueException(property, value, "correct type for " + property);
         }
-        return false;
+        
+        // Actualizar singleton en RAM antes de guardar
+        ConfigUtil.updateConfigInMemory(config);
+        System.out.println("Propiedad '" + property + "' actualizada en RAM");
+        
+        saveConfig(config);
     }
     
     /**
      * Añade un nuevo canal a la configuración
      */
-    public boolean addChannel(String name, boolean enabled) {
+    public void addChannel(String name, boolean enabled) {
         Optional<DanteConfig> configOpt = readConfig();
-        if (configOpt.isPresent()) {
-            DanteConfig config = configOpt.get();
-            config.addChannel(new Channel(name, enabled));
-            
-            // Actualizar singleton en RAM antes de guardar
-            ConfigUtil.updateConfigInMemory(config);
-            System.out.println("Nuevo canal '" + name + "' añadido en RAM");
-            
-            return saveConfig(config);
+        if (configOpt.isEmpty()) {
+            throw new ConfigExceptions.ConfigNotInitializedException();
         }
-        return false;
+        
+        DanteConfig config = configOpt.get();
+        config.addChannel(new Channel(name, enabled));
+        
+        // Actualizar singleton en RAM antes de guardar
+        ConfigUtil.updateConfigInMemory(config);
+        System.out.println("Nuevo canal '" + name + "' añadido en RAM");
+        
+        saveConfig(config);
     }
     
     /**
      * Añade un canal con ID específico
      */
-    public boolean addChannel(int id, String name, boolean enabled) {
+    public void addChannel(int id, String name, boolean enabled) {
         Optional<DanteConfig> configOpt = readConfig();
-        if (configOpt.isPresent()) {
-            DanteConfig config = configOpt.get();
-            // Verificar que el ID no exista ya
-            if (config.getChannelById(id) != null) {
-                System.err.println("Ya existe un canal con ID: " + id);
-                return false;
-            }
-            config.addChannel(new Channel(id, name, enabled));
-            return saveConfig(config);
+        if (configOpt.isEmpty()) {
+            throw new ConfigExceptions.ConfigNotInitializedException();
         }
-        return false;
+        
+        DanteConfig config = configOpt.get();
+        // Verificar que el ID no exista ya
+        if (config.getChannelById(id) != null) {
+            throw new ConfigExceptions.ChannelAlreadyExistsException(id);
+        }
+        
+        config.addChannel(new Channel(id, name, enabled));
+        saveConfig(config);
     }
     
     /**
      * Actualiza un canal específico por ID
      */
-    public boolean updateChannelById(int id, String name, Boolean enabled) {
+    public void updateChannelById(int id, String name, Boolean enabled) {
         Optional<DanteConfig> configOpt = readConfig();
-        if (configOpt.isPresent()) {
-            DanteConfig config = configOpt.get();
-            boolean success = config.updateChannelById(id, name, enabled);
-            if (success) {
-                // Primero actualizar el singleton en RAM
-                ConfigUtil.updateConfigInMemory(config);
-                System.out.println("Canal ID " + id + " actualizado en RAM");
-                
-                // Luego guardar en archivo (saveConfig también actualiza RAM pero es buena práctica)
-                return saveConfig(config);
-            }
+        if (configOpt.isEmpty()) {
+            throw new ConfigExceptions.ConfigNotInitializedException();
         }
-        return false;
+        
+        DanteConfig config = configOpt.get();
+        boolean success = config.updateChannelById(id, name, enabled);
+        
+        if (!success) {
+            throw new ConfigExceptions.ChannelNotFoundException(id);
+        }
+        
+        // Primero actualizar el singleton en RAM
+        ConfigUtil.updateConfigInMemory(config);
+        System.out.println("Canal ID " + id + " actualizado en RAM");
+        
+        // Luego guardar en archivo (saveConfig también actualiza RAM pero es buena práctica)
+        saveConfig(config);
     }
     
     /**
      * Elimina un canal por ID
      */
-    public boolean removeChannelById(int id) {
+    public void removeChannelById(int id) {
         Optional<DanteConfig> configOpt = readConfig();
-        if (configOpt.isPresent()) {
-            DanteConfig config = configOpt.get();
-            boolean success = config.removeChannelById(id);
-            if (success) {
-                // Actualizar singleton en RAM antes de guardar
-                ConfigUtil.updateConfigInMemory(config);
-                System.out.println("Canal ID " + id + " eliminado de RAM");
-                
-                return saveConfig(config);
-            }
+        if (configOpt.isEmpty()) {
+            throw new ConfigExceptions.ConfigNotInitializedException();
         }
-        return false;
+        
+        DanteConfig config = configOpt.get();
+        boolean success = config.removeChannelById(id);
+        
+        if (!success) {
+            throw new ConfigExceptions.ChannelNotFoundException(id);
+        }
+        
+        // Actualizar singleton en RAM antes de guardar
+        ConfigUtil.updateConfigInMemory(config);
+        System.out.println("Canal ID " + id + " eliminado de RAM");
+        
+        saveConfig(config);
     }
     
     /**
@@ -266,49 +280,69 @@ public class DanteConfigService {
      */
     public Channel getChannelById(int id) {
         Optional<DanteConfig> configOpt = readConfig();
-        if (configOpt.isPresent()) {
-            return configOpt.get().getChannelById(id);
+        if (configOpt.isEmpty()) {
+            throw new ConfigExceptions.ConfigNotInitializedException();
         }
-        return null;
+        
+        Channel channel = configOpt.get().getChannelById(id);
+        if (channel == null) {
+            throw new ConfigExceptions.ChannelNotFoundException(id);
+        }
+        
+        return channel;
     }
     
     /**
      * Actualiza un canal específico por índice (método legacy)
+     * @deprecated Use updateChannelById instead
      */
-    public boolean updateChannel(int index, String name, Boolean enabled) {
+    @Deprecated
+    public void updateChannel(int index, String name, Boolean enabled) {
         Optional<DanteConfig> configOpt = readConfig();
-        if (configOpt.isPresent()) {
-            DanteConfig config = configOpt.get();
-            Channel channel = config.getChannel(index);
-            if (channel != null) {
-                if (name != null) {
-                    channel.setName(name);
-                }
-                if (enabled != null) {
-                    channel.setEnabled(enabled);
-                }
-                
-                // Actualizar singleton en RAM antes de guardar
-                ConfigUtil.updateConfigInMemory(config);
-                System.out.println("Canal índice " + index + " actualizado en RAM");
-                
-                return saveConfig(config);
-            }
+        if (configOpt.isEmpty()) {
+            throw new ConfigExceptions.ConfigNotInitializedException();
         }
-        return false;
+        
+        DanteConfig config = configOpt.get();
+        Channel channel = config.getChannel(index);
+        if (channel == null) {
+            throw new ConfigExceptions.ChannelNotFoundException("Index: " + index);
+        }
+        
+        if (name != null) {
+            channel.setName(name);
+        }
+        if (enabled != null) {
+            channel.setEnabled(enabled);
+        }
+        
+        // Actualizar singleton en RAM antes de guardar
+        ConfigUtil.updateConfigInMemory(config);
+        System.out.println("Canal índice " + index + " actualizado en RAM");
+        
+        saveConfig(config);
     }
     
     /**
      * Elimina un canal por índice (método legacy)
+     * @deprecated Use removeChannelById instead
      */
-    public boolean removeChannel(int index) {
+    @Deprecated
+    public void removeChannel(int index) {
         Optional<DanteConfig> configOpt = readConfig();
-        if (configOpt.isPresent()) {
-            DanteConfig config = configOpt.get();
-            config.removeChannel(index);
-            return saveConfig(config);
+        if (configOpt.isEmpty()) {
+            throw new ConfigExceptions.ConfigNotInitializedException();
         }
-        return false;
+        
+        DanteConfig config = configOpt.get();
+        
+        // Verificar que el índice sea válido antes de eliminar
+        if (index < 0 || index >= config.getChannels().size()) {
+            throw new ConfigExceptions.ChannelNotFoundException("Index: " + index);
+        }
+        
+        config.removeChannel(index);
+        saveConfig(config);
     }
     
     /**
@@ -331,8 +365,13 @@ public class DanteConfigService {
         defaultConfig.addChannel(new Channel(2, "Channel 2", false));
         defaultConfig.addChannel(new Channel(3, "Channel 3", true));
         
-        // Guardar en archivo y sincronizar con RAM
-        saveConfig(defaultConfig);
+        try {
+            // Guardar en archivo y sincronizar con RAM
+            saveConfig(defaultConfig);
+        } catch (ConfigExceptions.ConfigFileWriteException e) {
+            System.err.println("Warning: Could not save default config to file, using RAM only");
+            ConfigUtil.updateConfigInMemory(defaultConfig);
+        }
         return defaultConfig;
     }
     
@@ -346,14 +385,14 @@ public class DanteConfigService {
     /**
      * Sincroniza manualmente el archivo con RAM
      */
-    public boolean syncWithRAM() {
+    public void syncWithRAM() {
         Optional<DanteConfig> configOpt = readConfig();
-        if (configOpt.isPresent()) {
-            ConfigUtil.updateConfigInMemory(configOpt.get());
-            System.out.println("Configuración sincronizada manualmente con RAM");
-            return true;
+        if (configOpt.isEmpty()) {
+            throw new ConfigExceptions.ConfigFileNotFoundException(configFilePath.toString());
         }
-        return false;
+        
+        ConfigUtil.updateConfigInMemory(configOpt.get());
+        System.out.println("Configuración sincronizada manualmente con RAM");
     }
     
     /**

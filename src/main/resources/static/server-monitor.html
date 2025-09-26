@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Status Monitor - Dante Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status-online { color: #28a745; font-weight: bold; }
+        .status-offline { color: #dc3545; font-weight: bold; }
+        .status-unknown { color: #6c757d; font-weight: bold; }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover { background: #0056b3; }
+        button:disabled { 
+            background: #6c757d; 
+            cursor: not-allowed; 
+        }
+        
+        input, select {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 150px;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .info-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .response-time {
+            font-size: 1.2em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .fast { color: #28a745; }
+        .medium { color: #ffc107; }
+        .slow { color: #dc3545; }
+        
+        pre {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            max-height: 300px;
+            border: 1px solid #dee2e6;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>🖥️ Server Status Monitor - Dante Client</h1>
+    
+    <div class="container">
+        <h3>📡 Estado del Servidor Configurado</h3>
+        <div id="serverInfo">
+            <p><strong>Servidor:</strong> <span id="serverAddress">Cargando...</span></p>
+            <p><strong>Puerto:</strong> <span id="serverPort">-</span></p>
+            <p><strong>URL Completa:</strong> <span id="fullUrl">-</span></p>
+            <p><strong>Estado:</strong> <span id="serverStatus" class="status-unknown">Verificando...</span></p>
+        </div>
+        
+        <div class="response-time" id="responseTime"></div>
+        
+        <button onclick="checkStatus()" id="checkBtn">🔍 Verificar Estado</button>
+        <button onclick="getDetailedInfo()" id="infoBtn">ℹ️ Info Detallada</button>
+        <button onclick="quickPing()" id="quickBtn">⚡ Ping Rápido</button>
+        <button onclick="multiPing()" id="multiBtn">📊 Ping Múltiple (5x)</button>
+        <button onclick="startAutoRefresh()" id="autoBtn">🔄 Auto Refresh</button>
+        <button onclick="stopAutoRefresh()" id="stopBtn" disabled>⏹️ Detener Auto</button>
+    </div>
+
+    <div class="container">
+        <h3>🎯 Ping Personalizado</h3>
+        <label>Servidor: <input type="text" id="customServer" placeholder="192.168.1.100" value="192.168.1.100"></label>
+        <label>Puerto: <input type="text" id="customPort" placeholder="8080" value="8080"></label>
+        <button onclick="pingCustomServer()">🏓 Ping Personalizado</button>
+    </div>
+
+    <div class="info-grid">
+        <div class="container">
+            <h4>📋 Última Respuesta</h4>
+            <pre id="lastResponse">Click en "Verificar Estado" para ver la respuesta...</pre>
+        </div>
+        
+        <div class="container">
+            <h4>📊 Estadísticas</h4>
+            <div id="stats">
+                <p><strong>Última verificación:</strong> <span id="lastCheck">-</span></p>
+                <p><strong>Total de checks:</strong> <span id="totalChecks">0</span></p>
+                <p><strong>Checks exitosos:</strong> <span id="successfulChecks">0</span></p>
+                <p><strong>Tasa de éxito:</strong> <span id="successRate">0%</span></p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let autoRefreshInterval = null;
+        let totalChecks = 0;
+        let successfulChecks = 0;
+
+        // Cargar configuración inicial
+        window.onload = function() {
+            loadServerConfig();
+            updateStats();
+        };
+
+        function loadServerConfig() {
+            fetch('/api/server/config')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('serverAddress').textContent = data.server;
+                    document.getElementById('serverPort').textContent = data.port;
+                    document.getElementById('fullUrl').textContent = data.fullUrl;
+                    
+                    // Hacer check inicial
+                    setTimeout(quickPing, 500);
+                })
+                .catch(error => {
+                    console.error('Error cargando configuración:', error);
+                    document.getElementById('serverStatus').textContent = 'Error cargando config';
+                    document.getElementById('serverStatus').className = 'status-offline';
+                });
+        }
+
+        function checkStatus() {
+            setLoading('checkBtn', true);
+            
+            fetch('/api/server/status')
+                .then(response => response.json())
+                .then(data => {
+                    updateServerStatus(data);
+                    updateLastResponse(data);
+                    updateStats();
+                    totalChecks++;
+                    if (data.isReachable) successfulChecks++;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    updateServerStatus({isReachable: false, status: 'ERROR', errorMessage: error.message});
+                    totalChecks++;
+                })
+                .finally(() => {
+                    setLoading('checkBtn', false);
+                });
+        }
+
+        function quickPing() {
+            setLoading('quickBtn', true);
+            
+            fetch('/api/server/ping/quick')
+                .then(response => response.json())
+                .then(data => {
+                    updateServerStatus(data);
+                    updateLastResponse(data);
+                    updateStats();
+                    totalChecks++;
+                    if (data.isOnline) successfulChecks++;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    updateServerStatus({isReachable: false, status: 'ERROR', errorMessage: error.message});
+                    totalChecks++;
+                })
+                .finally(() => {
+                    setLoading('quickBtn', false);
+                });
+        }
+
+        function multiPing() {
+            setLoading('multiBtn', true);
+            
+            fetch('/api/server/ping/multiple/5')
+                .then(response => response.json())
+                .then(data => {
+                    updateServerStatus(data);
+                    updateLastResponse(data);
+                    updateStats();
+                    totalChecks++;
+                    if (data.isReachable) successfulChecks++;
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    updateServerStatus({isReachable: false, status: 'ERROR', errorMessage: error.message});
+                    totalChecks++;
+                })
+                .finally(() => {
+                    setLoading('multiBtn', false);
+                });
+        }
+
+        function getDetailedInfo() {
+            setLoading('infoBtn', true);
+            
+            fetch('/api/server/info')
+                .then(response => response.json())
+                .then(data => {
+                    updateLastResponse(data);
+                    if (data.connectivity) {
+                        updateServerStatus(data.connectivity);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                })
+                .finally(() => {
+                    setLoading('infoBtn', false);
+                });
+        }
+
+        function pingCustomServer() {
+            const server = document.getElementById('customServer').value;
+            const port = document.getElementById('customPort').value;
+            
+            if (!server || !port) {
+                alert('Por favor ingresa servidor y puerto');
+                return;
+            }
+
+            fetch('/api/server/ping', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    server: server,
+                    port: port
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                updateLastResponse(data);
+                // Actualizar vista con servidor personalizado
+                const customStatus = {
+                    ...data,
+                    isOnline: data.isReachable // Mapear para compatibilidad
+                };
+                updateServerStatus(customStatus, server + ':' + port);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                updateLastResponse({error: error.message});
+            });
+        }
+
+        function updateServerStatus(data, customServer = null) {
+            const statusElement = document.getElementById('serverStatus');
+            const responseTimeElement = document.getElementById('responseTime');
+            
+            const isOnline = data.isReachable || data.isOnline;
+            const responseTime = data.responseTimeMs;
+            
+            if (isOnline) {
+                statusElement.textContent = 'ONLINE ✅';
+                statusElement.className = 'status-online';
+                
+                if (responseTime > 0) {
+                    let timeClass = 'fast';
+                    if (responseTime > 500) timeClass = 'slow';
+                    else if (responseTime > 200) timeClass = 'medium';
+                    
+                    responseTimeElement.innerHTML = `<span class="${timeClass}">⚡ ${responseTime}ms</span>`;
+                } else {
+                    responseTimeElement.textContent = '';
+                }
+            } else {
+                statusElement.textContent = 'OFFLINE ❌';
+                statusElement.className = 'status-offline';
+                responseTimeElement.innerHTML = `<span class="slow">❌ Sin respuesta</span>`;
+            }
+            
+            if (customServer) {
+                statusElement.textContent += ` (${customServer})`;
+            }
+            
+            document.getElementById('lastCheck').textContent = new Date().toLocaleTimeString();
+        }
+
+        function updateLastResponse(data) {
+            document.getElementById('lastResponse').textContent = JSON.stringify(data, null, 2);
+        }
+
+        function updateStats() {
+            document.getElementById('totalChecks').textContent = totalChecks;
+            document.getElementById('successfulChecks').textContent = successfulChecks;
+            
+            const rate = totalChecks > 0 ? Math.round((successfulChecks / totalChecks) * 100) : 0;
+            document.getElementById('successRate').textContent = rate + '%';
+        }
+
+        function setLoading(buttonId, isLoading) {
+            const button = document.getElementById(buttonId);
+            if (isLoading) {
+                button.disabled = true;
+                button.innerHTML = '<div class="loading"></div> Verificando...';
+            } else {
+                button.disabled = false;
+                // Restaurar texto original
+                switch(buttonId) {
+                    case 'checkBtn': button.innerHTML = '🔍 Verificar Estado'; break;
+                    case 'quickBtn': button.innerHTML = '⚡ Ping Rápido'; break;
+                    case 'multiBtn': button.innerHTML = '📊 Ping Múltiple (5x)'; break;
+                    case 'infoBtn': button.innerHTML = 'ℹ️ Info Detallada'; break;
+                }
+            }
+        }
+
+        function startAutoRefresh() {
+            if (autoRefreshInterval) return;
+            
+            autoRefreshInterval = setInterval(quickPing, 3000); // Cada 3 segundos
+            document.getElementById('autoBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            
+            console.log('Auto-refresh iniciado (cada 3 segundos)');
+        }
+
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+            
+            document.getElementById('autoBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            
+            console.log('Auto-refresh detenido');
+        }
+    </script>
+</body>
+</html>

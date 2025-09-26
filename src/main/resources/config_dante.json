@@ -13,11 +13,19 @@
     "enabled" : true
   }, {
     "id" : 2,
-    "name" : "Canal de Audio 2 funcionando",
-    "enabled" : true
+    "name" : "Channel 2",
+    "enabled" : false
   }, {
     "id" : 3,
-    "name" : "Canal de Audio 3 funcionando",
+    "name" : "Channel 3",
+    "enabled" : true
+  }, {
+    "id" : 4,
+    "name" : "Canal de Audio 6",
+    "enabled" : true
+  }, {
+    "id" : 5,
+    "name" : "Canal de Audio 6",
     "enabled" : true
   } ]
 }
