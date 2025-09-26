@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 public class ServerPingService {
     
     private static final int DEFAULT_TIMEOUT_MS = 5000;
-    private static final int DEFAULT_PORT_TIMEOUT_MS = 3000;
+
     
     /**
      * Realiza ping al servidor configurado en el singleton
