@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test WebSocket - Canal de Volumen</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .connected { color: green; }
+        .disconnected { color: red; }
+        .message {
+            background: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover { background: #0056b3; }
+        input, select {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #messages {
+            height: 300px;
+            overflow-y: auto;
+            background: white;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎵 Test WebSocket - Canal de Volumen</h1>
+    
+    <div class="container">
+        <h3>📡 Estado de Conexión</h3>
+        <p>Estado: <span id="status" class="disconnected">Desconectado</span></p>
+        <p>Session ID: <span id="sessionId">-</span></p>
+        <button id="connectBtn" onclick="connect()">Conectar</button>
+        <button id="disconnectBtn" onclick="disconnect()" disabled>Desconectar</button>
+    </div>
+
+    <div class="container">
+        <h3>🎚️ Controles de Volumen</h3>
+        <label>Canal ID: 
+            <select id="channelId">
+                <option value="1">Canal 1</option>
+                <option value="2">Canal 2</option>
+                <option value="3">Canal 3</option>
+            </select>
+        </label>
+        <br>
+        <label>Nivel (0-100): 
+            <input type="range" id="volumeSlider" min="0" max="100" value="50" oninput="updateVolumeDisplay()">
+            <span id="volumeDisplay">50</span>
+        </label>
+        <br>
+        <button onclick="sendVolume()">📤 Enviar Volumen</button>
+        <button onclick="muteChannel()">🔇 Mute</button>
+        <button onclick="unmuteChannel()">🔊 Unmute</button>
+        <button onclick="maxVolume()">📢 Max</button>
+    </div>
+
+    <div class="container">
+        <h3>📨 Mensajes WebSocket</h3>
+        <button onclick="clearMessages()">🗑️ Limpiar</button>
+        <div id="messages"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let isConnected = false;
+
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                addMessage('Ya estás conectado', 'warning');
+                return;
+            }
+
+            // Cambiar localhost por la IP del servidor si es necesario
+            ws = new WebSocket('ws://localhost:8080/ws/volume');
+            
+            ws.onopen = function(event) {
+                isConnected = true;
+                updateConnectionStatus();
+                addMessage('✅ Conectado al WebSocket', 'success');
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                addMessage('📨 Recibido: ' + JSON.stringify(data, null, 2), 'info');
+                
+                if (data.type === 'connection' && data.sessionId) {
+                    document.getElementById('sessionId').textContent = data.sessionId;
+                }
+            };
+            
+            ws.onclose = function(event) {
+                isConnected = false;
+                updateConnectionStatus();
+                addMessage('❌ Conexión cerrada', 'error');
+                document.getElementById('sessionId').textContent = '-';
+            };
+            
+            ws.onerror = function(error) {
+                addMessage('❌ Error de WebSocket: ' + error, 'error');
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+        }
+
+        function updateConnectionStatus() {
+            const status = document.getElementById('status');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+            
+            if (isConnected) {
+                status.textContent = 'Conectado';
+                status.className = 'connected';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+            } else {
+                status.textContent = 'Desconectado';
+                status.className = 'disconnected';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+            }
+        }
+
+        function sendVolume() {
+            const channelId = document.getElementById('channelId').value;
+            const volumeLevel = document.getElementById('volumeSlider').value;
+            
+            fetch(`http://localhost:8080/api/volume/channel/${channelId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ volumeLevel: parseInt(volumeLevel) })
+            })
+            .then(response => response.json())
+            .then(data => {
+                addMessage('📤 Volumen enviado: ' + JSON.stringify(data, null, 2), 'success');
+            })
+            .catch(error => {
+                addMessage('❌ Error al enviar volumen: ' + error, 'error');
+            });
+        }
+
+        function muteChannel() {
+            const channelId = document.getElementById('channelId').value;
+            
+            fetch(`http://localhost:8080/api/volume/channel/${channelId}/mute`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                addMessage('🔇 Canal muteado: ' + JSON.stringify(data, null, 2), 'success');
+                document.getElementById('volumeSlider').value = 0;
+                updateVolumeDisplay();
+            })
+            .catch(error => {
+                addMessage('❌ Error al mutear: ' + error, 'error');
+            });
+        }
+
+        function unmuteChannel() {
+            const channelId = document.getElementById('channelId').value;
+            
+            fetch(`http://localhost:8080/api/volume/channel/${channelId}/unmute`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                addMessage('🔊 Canal desmuteado: ' + JSON.stringify(data, null, 2), 'success');
+                document.getElementById('volumeSlider').value = 50;
+                updateVolumeDisplay();
+            })
+            .catch(error => {
+                addMessage('❌ Error al desmutear: ' + error, 'error');
+            });
+        }
+
+        function maxVolume() {
+            const channelId = document.getElementById('channelId').value;
+            
+            fetch(`http://localhost:8080/api/volume/channel/${channelId}/max`, {
+                method: 'POST'
+            })
+            .then(response => response.json())
+            .then(data => {
+                addMessage('📢 Volumen máximo: ' + JSON.stringify(data, null, 2), 'success');
+                document.getElementById('volumeSlider').value = 100;
+                updateVolumeDisplay();
+            })
+            .catch(error => {
+                addMessage('❌ Error al establecer volumen máximo: ' + error, 'error');
+            });
+        }
+
+        function updateVolumeDisplay() {
+            const value = document.getElementById('volumeSlider').value;
+            document.getElementById('volumeDisplay').textContent = value;
+        }
+
+        function addMessage(message, type) {
+            const messages = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message';
+            messageDiv.innerHTML = `<small>${new Date().toLocaleTimeString()}</small><br>${message}`;
+            messages.appendChild(messageDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        // Auto-conectar al cargar la página
+        window.onload = function() {
+            updateConnectionStatus();
+            setTimeout(connect, 1000); // Conectar después de 1 segundo
+        };
+    </script>
+</body>
+</html>
