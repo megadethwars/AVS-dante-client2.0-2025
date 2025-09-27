@@ -14,7 +14,7 @@
   }, {
     "id" : 2,
     "name" : "Channel 2",
-    "enabled" : false
+    "enabled" : true
   }, {
     "id" : 3,
     "name" : "Channel 3",

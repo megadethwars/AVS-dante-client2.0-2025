@@ -16,6 +16,7 @@ public class ChannelThread {
     private CompletableFuture<Void> future; // No final para poder asignar después
     private volatile String status;
     private volatile String currentTask;
+    private volatile int volume; // Volumen del canal (0-100)
     
     public ChannelThread(int channelId, String channelName, CompletableFuture<Void> future) {
         this.channelId = channelId;
@@ -25,6 +26,7 @@ public class ChannelThread {
         this.future = future;
         this.status = "RUNNING";
         this.currentTask = "Inicializando...";
+        this.volume = 50; // Volumen inicial por defecto
     }
     
     /**
@@ -79,6 +81,28 @@ public class ChannelThread {
     }
     
     /**
+     * Establece el volumen del canal
+     */
+    public void setVolume(int volume) {
+        if (volume < 0 || volume > 100) {
+            throw new IllegalArgumentException("El volumen debe estar entre 0 y 100");
+        }
+        
+        int oldVolume = this.volume;
+        this.volume = volume;
+        
+        System.out.println("🔊 Canal " + channelId + " - Volumen cambiado de " + oldVolume + " a " + volume);
+        updateCurrentTask("Volumen ajustado a " + volume + "%");
+    }
+    
+    /**
+     * Obtiene el volumen actual del canal
+     */
+    public int getVolume() {
+        return volume;
+    }
+    
+    /**
      * Método run que ejecuta el bucle principal del thread
      */
     public void run() {
@@ -88,7 +112,14 @@ public class ChannelThread {
             updateCurrentTask("Ejecutando bucle principal");
             
             while (running.get()) {
-                System.out.println("estoy corriendo - Canal " + channelId + " (" + channelName + ")");
+                System.out.println("estoy corriendo - Canal " + channelId + " (" + channelName + ") - Volumen: " + volume + "%");
+                
+                // Simular procesamiento de audio con el volumen actual
+                if (volume > 0) {
+                    updateCurrentTask("Procesando audio - Vol: " + volume + "%");
+                } else {
+                    updateCurrentTask("Silenciado - Vol: 0%");
+                }
                 
                 // Esperar 1 segundo
                 Thread.sleep(1000);
@@ -155,6 +186,7 @@ public class ChannelThread {
                 ", channelName='" + channelName + '\'' +
                 ", status='" + status + '\'' +
                 ", currentTask='" + currentTask + '\'' +
+                ", volume=" + volume +
                 ", startTime=" + startTime +
                 ", running=" + running.get() +
                 '}';
