@@ -17,6 +17,7 @@ public class ChannelThread {
     private volatile String status;
     private volatile String currentTask;
     private volatile int volume; // Volumen del canal (0-100)
+    private ThreadEventListener eventListener; // Listener para notificaciones
     
     public ChannelThread(int channelId, String channelName, CompletableFuture<Void> future) {
         this.channelId = channelId;
@@ -26,7 +27,7 @@ public class ChannelThread {
         this.future = future;
         this.status = "RUNNING";
         this.currentTask = "Inicializando...";
-        this.volume = 50; // Volumen inicial por defecto
+        this.volume = 0; // Volumen inicial por defecto
     }
     
     /**
@@ -69,8 +70,14 @@ public class ChannelThread {
     /**
      * Actualiza el estado del thread
      */
-    public void updateStatus(String status) {
-        this.status = status;
+    public void updateStatus(String newStatus) {
+        String oldStatus = this.status;
+        this.status = newStatus;
+        
+        // Notificar cambio de estado si hay listener
+        if (eventListener != null && !oldStatus.equals(newStatus)) {
+            eventListener.onThreadStatusChanged(channelId, channelName, oldStatus, newStatus);
+        }
     }
     
     /**
@@ -103,6 +110,13 @@ public class ChannelThread {
     }
     
     /**
+     * Establece el listener para eventos del thread
+     */
+    public void setEventListener(ThreadEventListener eventListener) {
+        this.eventListener = eventListener;
+    }
+    
+    /**
      * Método run que ejecuta el bucle principal del thread
      */
     public void run() {
@@ -129,14 +143,30 @@ public class ChannelThread {
             updateCurrentTask("Bucle terminado");
             System.out.println("✅ Thread terminado para canal " + channelId + " (" + channelName + ")");
             
+            // Notificar finalización normal
+            if (eventListener != null) {
+                eventListener.onThreadFinished(channelId, channelName, "Normal completion");
+            }
+            
         } catch (InterruptedException e) {
             updateStatus("INTERRUPTED");
             updateCurrentTask("Thread interrumpido");
             System.out.println("⚠️ Thread interrumpido para canal " + channelId + " (" + channelName + ")");
+            
+            // Notificar interrupción
+            if (eventListener != null) {
+                eventListener.onThreadFinished(channelId, channelName, "Thread interrupted");
+            }
+            
         } catch (Exception e) {
             updateStatus("ERROR");
             updateCurrentTask("Error: " + e.getMessage());
             System.err.println("❌ Error en thread canal " + channelId + ": " + e.getMessage());
+            
+            // Notificar excepción
+            if (eventListener != null) {
+                eventListener.onThreadException(channelId, channelName, e.getClass().getSimpleName(), e.getMessage());
+            }
         }
     }
     

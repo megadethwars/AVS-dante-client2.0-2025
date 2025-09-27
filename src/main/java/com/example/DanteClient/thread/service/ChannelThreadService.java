@@ -1,10 +1,13 @@
 package com.example.DanteClient.thread.service;
 
 import com.example.DanteClient.thread.model.ChannelThread;
+import com.example.DanteClient.thread.model.ThreadEventListener;
 import com.example.DanteClient.data.util.ConfigUtil;
 import com.example.DanteClient.data.model.Channel;
 import com.example.DanteClient.thread.exception.ThreadException;
 import com.example.DanteClient.thread.exception.ThreadExceptions;
+import com.example.DanteClient.thread.config.ThreadWebSocketHandler;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.concurrent.CompletableFuture;
@@ -19,7 +22,10 @@ import java.util.ArrayList;
  * Servicio para gestionar threads de canales de audio
  */
 @Service
-public class ChannelThreadService {
+public class ChannelThreadService implements ThreadEventListener {
+    
+    @Autowired
+    private ThreadWebSocketHandler threadWebSocketHandler;
     
     private final ConcurrentHashMap<Integer, ChannelThread> activeThreads;
     private final ScheduledExecutorService executorService;
@@ -60,6 +66,9 @@ public class ChannelThreadService {
             // Crear objeto ChannelThread primero
             ChannelThread channelThread = new ChannelThread(channelId, channel.getName());
             
+            // Configurar el listener para recibir notificaciones del thread
+            channelThread.setEventListener(this);
+            
             // Crear y ejecutar el thread usando el método run del ChannelThread
             CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
                 channelThread.run();
@@ -71,13 +80,30 @@ public class ChannelThreadService {
             // Almacenar el ChannelThread
             activeThreads.put(channelId, channelThread);
             
+            // Notificar via WebSocket que el thread se inició
+            if (threadWebSocketHandler != null) {
+                threadWebSocketHandler.notifyThreadStarted(channelId, channel.getName());
+            }
+            
             System.out.println("Thread iniciado para canal " + channelId + " (" + channel.getName() + ")");
             return true;
             
         } catch (ThreadException ex) {
+            // Notificar excepción via WebSocket
+            if (threadWebSocketHandler != null) {
+                Channel channel = ConfigUtil.getChannelById(channelId);
+                String channelName = (channel != null) ? channel.getName() : "Unknown";
+                threadWebSocketHandler.notifyThreadException(channelId, channelName, ex.getClass().getSimpleName(), ex.getMessage());
+            }
             // Re-lanzar excepciones de thread para que sean capturadas por el handler
             throw ex;
         } catch (Exception ex) {
+            // Notificar excepción via WebSocket
+            if (threadWebSocketHandler != null) {
+                Channel channel = ConfigUtil.getChannelById(channelId);
+                String channelName = (channel != null) ? channel.getName() : "Unknown";
+                threadWebSocketHandler.notifyThreadException(channelId, channelName, ex.getClass().getSimpleName(), ex.getMessage());
+            }
             // Convertir cualquier otra excepción en ThreadCreationException
             throw new ThreadExceptions.ThreadCreationException(channelId, ex);
         }
@@ -102,6 +128,11 @@ public class ChannelThreadService {
             // Detener el thread
             channelThread.stop();
             
+            // Notificar via WebSocket que el thread se detuvo
+            if (threadWebSocketHandler != null) {
+                threadWebSocketHandler.notifyThreadFinished(channelId, channelThread.getChannelName(), "Manual stop");
+            }
+            
             // Remover de la lista de threads activos
             activeThreads.remove(channelId);
             
@@ -109,9 +140,21 @@ public class ChannelThreadService {
             return true;
             
         } catch (ThreadException ex) {
+            // Notificar excepción via WebSocket
+            if (threadWebSocketHandler != null) {
+                ChannelThread thread = activeThreads.get(channelId);
+                String channelName = (thread != null) ? thread.getChannelName() : "Unknown";
+                threadWebSocketHandler.notifyThreadException(channelId, channelName, ex.getClass().getSimpleName(), ex.getMessage());
+            }
             // Re-lanzar excepciones de thread para que sean capturadas por el handler
             throw ex;
         } catch (Exception ex) {
+            // Notificar excepción via WebSocket
+            if (threadWebSocketHandler != null) {
+                ChannelThread thread = activeThreads.get(channelId);
+                String channelName = (thread != null) ? thread.getChannelName() : "Unknown";
+                threadWebSocketHandler.notifyThreadException(channelId, channelName, ex.getClass().getSimpleName(), ex.getMessage());
+            }
             // Convertir cualquier otra excepción en ThreadStopException
             throw new ThreadExceptions.ThreadStopException(channelId, ex);
         }
@@ -181,5 +224,45 @@ public class ChannelThreadService {
         }
         
         System.out.println("ChannelThreadService cerrado");
+    }
+    
+    // Implementación de ThreadEventListener
+    
+    @Override
+    public void onThreadFinished(int channelId, String channelName, String reason) {
+        System.out.println("🏁 Thread finalizado - Canal: " + channelId + ", Razón: " + reason);
+        
+        // Remover thread de la lista activa
+        activeThreads.remove(channelId);
+        
+        // Notificar via WebSocket
+        if (threadWebSocketHandler != null) {
+            threadWebSocketHandler.notifyThreadFinished(channelId, channelName, reason);
+        }
+    }
+    
+    @Override
+    public void onThreadException(int channelId, String channelName, String exceptionType, String errorMessage) {
+        System.err.println("❌ Excepción en thread - Canal: " + channelId + ", Tipo: " + exceptionType + ", Error: " + errorMessage);
+        
+        // Remover thread de la lista activa si hay error crítico
+        if (exceptionType.contains("Error") || exceptionType.contains("Exception")) {
+            activeThreads.remove(channelId);
+        }
+        
+        // Notificar via WebSocket
+        if (threadWebSocketHandler != null) {
+            threadWebSocketHandler.notifyThreadException(channelId, channelName, exceptionType, errorMessage);
+        }
+    }
+    
+    @Override
+    public void onThreadStatusChanged(int channelId, String channelName, String oldStatus, String newStatus) {
+        System.out.println("🔄 Cambio de estado - Canal: " + channelId + ", " + oldStatus + " -> " + newStatus);
+        
+        // Notificar via WebSocket
+        if (threadWebSocketHandler != null) {
+            threadWebSocketHandler.notifyThreadStatusChange(channelId, channelName, oldStatus, newStatus);
+        }
     }
 }

@@ -16,10 +16,17 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Autowired
     private VolumeWebSocketHandler volumeWebSocketHandler;
     
+    @Autowired
+    private ThreadWebSocketHandler threadWebSocketHandler;
+    
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         // Registrar el handler para el endpoint de volumen
         registry.addHandler(volumeWebSocketHandler, "/ws/volume")
+                .setAllowedOrigins("*"); // Permitir conexiones desde cualquier origen
+        
+        // Registrar el handler para el endpoint de notificaciones de threads
+        registry.addHandler(threadWebSocketHandler, "/ws/thread")
                 .setAllowedOrigins("*"); // Permitir conexiones desde cualquier origen
     }
 }
