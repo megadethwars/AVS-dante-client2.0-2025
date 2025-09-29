@@ -16,6 +16,9 @@ import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.Map;
 import java.util.HashMap;
 
+// Import ChannelVolumeManager if it exists in your project
+import com.example.DanteClient.thread.service.ChannelVolumeManager;
+
 /**
  * Handler de WebSocket para gestionar conexiones de volumen de canales
  */
@@ -24,6 +27,9 @@ public class VolumeWebSocketHandler extends TextWebSocketHandler {
     
     @Autowired
     private ChannelThreadService threadService;
+
+    @Autowired
+    private ChannelVolumeManager volumeManager;
     
     private final ObjectMapper objectMapper = new ObjectMapper();
     
@@ -162,7 +168,7 @@ public class VolumeWebSocketHandler extends TextWebSocketHandler {
                     
                     String successMessage = objectMapper.writeValueAsString(successResponse);
                     sendMessage(session, successMessage);
-                    
+                    volumeManager.setVolume(channelId, volume);
                     // Broadcast del cambio de volumen a todas las conexiones
                     broadcastVolumeUpdate(channelId, volume);
                     

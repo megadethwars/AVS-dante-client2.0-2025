@@ -6,6 +6,8 @@ import com.example.DanteClient.data.service.DanteConfigService;
 import com.example.DanteClient.data.exception.ConfigExceptions;
 import com.example.DanteClient.data.dto.SuccessResponse;
 import com.example.DanteClient.thread.service.ChannelThreadService;
+import com.example.DanteClient.thread.service.ChannelVolumeManager;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -31,6 +33,9 @@ public class DanteConfigController {
 
     @Autowired
     private ChannelThreadService channelThreadService;
+
+    @Autowired
+    private ChannelVolumeManager volumeManager;
 
     /**
      * Obtiene la configuración completa
@@ -225,7 +230,7 @@ public class DanteConfigController {
                                 .getStartTime()
                                 .toString());
                     }
-                    
+                    channelInfo.put("volume", volumeManager.getVolume(channel.getId()));
                     return channelInfo;
                 })
                 .collect(Collectors.toList());

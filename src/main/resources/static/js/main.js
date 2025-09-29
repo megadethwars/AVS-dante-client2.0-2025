@@ -4,34 +4,47 @@ let threadSocket;
 
 // Inicializar las conexiones WebSocket
 function initWebSockets() {
-    // WebSocket para control de volumen
-    volumeSocket = new WebSocket('ws://localhost:8080/ws/volume');
-   // Cargar los canales cuando se inicia la página
-window.addEventListener('load', () => {
-    getAllChannelStatus();  // Llamamos a getAllChannels cuando la página se carga
-    
-    // Actualizar el estado cada 5 segundos
-    setInterval(() => {
-        getAllChannelStatus();
-    }, 5000);
-});
-meSocket.onopen = () => updateConnectionStatus('Conectado - Control de Volumen');
-    volumeSocket.onclose = () => updateConnectionStatus('Desconectado - Control de Volumen');
-    volumeSocket.onerror = () => console.error('Error en la conexión de volumen');
+    function setupWebSocket(url, type) {
+        const ws = new WebSocket(url);
+        
+        ws.onopen = () => {
+            console.log(`Conexión establecida - ${type}`);
+            updateConnectionStatus(`Conectado - ${type}`);
+        };
 
-    // WebSocket para monitoreo de hilos
-    threadSocket = new WebSocket('ws://localhost:8080/ws/thread');
-    threadSocket.onopen = () => updateConnectionStatus('Conectado - Monitoreo de Hilos');
-    threadSocket.onclose = () => updateConnectionStatus('Desconectado - Monitoreo de Hilos');
-    threadSocket.onerror = () => console.error('Error en la conexión de hilos');
+        ws.onclose = () => {
+            console.log(`Conexión perdida - ${type}`);
+            updateConnectionStatus(`Desconectado - ${type}`);
+            // Intentar reconexión después de 2 segundos
+            setTimeout(() => {
+                console.log(`Intentando reconectar - ${type}...`);
+                if (type === 'Control de Volumen') {
+                    volumeSocket = setupWebSocket('ws://localhost:8080/ws/volume', type);
+                } else {
+                    threadSocket = setupWebSocket('ws://localhost:8080/ws/thread', type);
+                }
+            }, 2000);
+        };
 
-    // Manejar mensajes recibidos del servidor
-    threadSocket.onmessage = (event) => {
-        const threadStatus = document.getElementById('threadStatus');
-        const data = JSON.parse(event.data);
-        // Actualizar la interfaz con la información de los hilos
-        threadStatus.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
-    };
+        ws.onerror = (error) => {
+            console.error(`Error en la conexión de ${type}:`, error);
+        };
+
+        if (type === 'Monitoreo de Hilos') {
+            ws.onmessage = (event) => {
+                const threadStatus = document.getElementById('threadStatus');
+                const data = JSON.parse(event.data);
+                // Actualizar la interfaz con la información de los hilos
+                threadStatus.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            };
+        }
+
+        return ws;
+    }
+
+    // Inicializar ambos WebSockets
+    volumeSocket = setupWebSocket('ws://localhost:8080/ws/volume', 'Control de Volumen');
+    threadSocket = setupWebSocket('ws://localhost:8080/ws/thread', 'Monitoreo de Hilos');
 }
 
 // Función para ajustar el volumen
@@ -47,7 +60,12 @@ function adjustVolume(action) {
 
 // Función para actualizar el estado de la conexión en la interfaz
 function updateConnectionStatus(status) {
-    document.getElementById('connectionStatus').textContent = status;
+    const statusElement = document.getElementById('connectionStatus');
+    if (statusElement) {
+        statusElement.textContent = status;
+    }
+    // Siempre loggear el estado en la consola para debugging
+    console.log('Estado de conexión:', status);
 }
 
 // Iniciar las conexiones WebSocket cuando se carga la página
@@ -143,7 +161,7 @@ function updateChannelsUI(channels) {
                                 type="range" 
                                 min="0" 
                                 max="100" 
-                                value="100" 
+                                value="${channel.volume !== undefined ? channel.volume : 0}" 
                                 onchange="adjustChannelVolume(${channel.id}, this.value)"
                             >
                         </div>
@@ -293,4 +311,6 @@ function adjustChannelVolume(channelId, value) {
 // // Cargar los canales cuando se inicia la página
  window.addEventListener('load', () => {
      getAllChannelStatus();  // Llamamos a getAllChannels cuando la página se carga
+
+     initWebSockets();
  });

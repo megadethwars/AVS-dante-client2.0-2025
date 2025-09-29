@@ -4,6 +4,7 @@ import com.example.DanteClient.thread.model.ChannelVolume;
 import com.example.DanteClient.thread.config.VolumeWebSocketHandler;
 import com.example.DanteClient.data.util.ConfigUtil;
 import com.example.DanteClient.data.model.Channel;
+import com.example.DanteClient.thread.service.ChannelVolumeManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -22,6 +23,9 @@ public class ChannelVolumeController {
     
     @Autowired
     private VolumeWebSocketHandler webSocketHandler;
+
+    @Autowired
+    private ChannelVolumeManager volumeManager;
     
     // Almacenamiento en memoria de los niveles de volumen actuales
     private final ConcurrentHashMap<Integer, ChannelVolume> channelVolumes = new ConcurrentHashMap<>();
@@ -63,11 +67,8 @@ public class ChannelVolumeController {
                     .body("El nivel de volumen debe estar entre 0 y 100");
         }
         
-        // Crear objeto ChannelVolume
-        ChannelVolume channelVolume = new ChannelVolume(channelId, volumeLevel, channel.getName());
-        
-        // Almacenar en memoria
-        channelVolumes.put(channelId, channelVolume);
+        // Almacenar volumen en el manager
+        volumeManager.setVolume(channelId, volumeLevel);
         
         // Enviar por WebSocket a todos los clientes conectados
         webSocketHandler.broadcastVolumeUpdate(channelId, volumeLevel);
@@ -79,8 +80,8 @@ public class ChannelVolumeController {
         response.put("channelId", channelId);
         response.put("channelName", channel.getName());
         response.put("volumeLevel", volumeLevel);
-        response.put("volumeDescription", channelVolume.getVolumeDescription());
-        response.put("timestamp", channelVolume.getTimestamp());
+        response.put("volumeDescription", getVolumeDescription(volumeLevel));
+        response.put("timestamp", java.time.LocalDateTime.now());
         response.put("webSocketClients", webSocketHandler.getActiveConnectionsCount());
         
         return ResponseEntity.ok(response);
@@ -101,20 +102,18 @@ public class ChannelVolumeController {
         
         ChannelVolume channelVolume = channelVolumes.get(channelId);
         
-        if (channelVolume != null) {
-            Map<String, Object> response = new HashMap<>();
-            response.put("channelId", channelId);
-            response.put("channelName", channel.getName());
-            response.put("volumeLevel", channelVolume.getVolumeLevel());
-            response.put("volumeDescription", channelVolume.getVolumeDescription());
-            response.put("volumePercentage", channelVolume.getVolumeAsPercentage());
-            response.put("isMuted", channelVolume.isMuted());
-            response.put("timestamp", channelVolume.getTimestamp());
-            
-            return ResponseEntity.ok(response);
-        } else {
-            return ResponseEntity.notFound().build();
-        }
+        int volumeLevel = volumeManager.getVolume(channelId);
+        Map<String, Object> response = new HashMap<>();
+        response.put("channelId", channelId);
+        response.put("channelName", channel.getName());
+        response.put("volumeLevel", volumeLevel);
+        response.put("volumeDescription", getVolumeDescription(volumeLevel));
+        response.put("volumePercentage", volumeLevel);
+        response.put("isMuted", volumeLevel == 0);
+        response.put("timestamp", java.time.LocalDateTime.now());
+        
+        return ResponseEntity.ok(response);
+        
     }
     
     /**
@@ -126,16 +125,18 @@ public class ChannelVolumeController {
         Map<String, Object> response = new HashMap<>();
         
         Map<Integer, Object> volumes = new HashMap<>();
-        channelVolumes.forEach((channelId, channelVolume) -> {
+        ConcurrentHashMap<Integer, Integer> allVolumes = volumeManager.getAllVolumes();
+        
+        allVolumes.forEach((channelId, volumeLevel) -> {
             Channel channel = ConfigUtil.getChannelById(channelId);
             
             Map<String, Object> volumeInfo = new HashMap<>();
             volumeInfo.put("channelId", channelId);
             volumeInfo.put("channelName", channel != null ? channel.getName() : "Unknown");
-            volumeInfo.put("volumeLevel", channelVolume.getVolumeLevel());
-            volumeInfo.put("volumeDescription", channelVolume.getVolumeDescription());
-            volumeInfo.put("isMuted", channelVolume.isMuted());
-            volumeInfo.put("timestamp", channelVolume.getTimestamp());
+            volumeInfo.put("volumeLevel", volumeLevel);
+            volumeInfo.put("volumeDescription", getVolumeDescription(volumeLevel));
+            volumeInfo.put("isMuted", volumeLevel == 0);
+            volumeInfo.put("timestamp", java.time.LocalDateTime.now());
             
             volumes.put(channelId, volumeInfo);
         });
@@ -218,6 +219,17 @@ public class ChannelVolumeController {
         return ResponseEntity.ok(stats);
     }
     
+    /**
+     * Método helper para obtener descripción del volumen
+     */
+    private String getVolumeDescription(int volumeLevel) {
+        if (volumeLevel == 0) return "Silenciado";
+        if (volumeLevel <= 25) return "Bajo";
+        if (volumeLevel <= 50) return "Medio";
+        if (volumeLevel <= 75) return "Alto";
+        return "Máximo";
+    }
+
     /**
      * Envía mensaje de prueba por WebSocket
      * POST /api/volume/websocket/test
