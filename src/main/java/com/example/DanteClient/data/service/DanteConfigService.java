@@ -83,22 +83,17 @@ public class DanteConfigService {
      * Determina la ruta del archivo de configuración
      */
     private Path determineConfigPath() {
+        // Siempre usar el directorio de recursos
+        Path resourcesPath = Paths.get("src", "main", "resources", CONFIG_FILE_NAME);
+        
+        // Crear el directorio si no existe
         try {
-            // Primero intentar desde resources
-            ClassPathResource resource = new ClassPathResource(CONFIG_FILE_NAME);
-            if (resource.exists()) {
-                // Si existe en resources, usamos la ruta del directorio de trabajo + resources
-                Path resourcesPath = Paths.get("src", "main", "resources", CONFIG_FILE_NAME);
-                if (Files.exists(resourcesPath)) {
-                    return resourcesPath;
-                }
-            }
-        } catch (Exception e) {
-            System.out.println("No se pudo acceder a resources, usando directorio de trabajo");
+            Files.createDirectories(resourcesPath.getParent());
+        } catch (IOException e) {
+            System.err.println("Error creando directorio de recursos: " + e.getMessage());
         }
         
-        // Si no existe, crear en el directorio de trabajo
-        return Paths.get(CONFIG_FILE_NAME);
+        return resourcesPath;
     }
     
     /**
@@ -379,7 +374,15 @@ public class DanteConfigService {
      * Obtiene la configuración, creando una por defecto si no existe
      */
     public DanteConfig getOrCreateConfig() {
-        return readConfig().orElse(createDefaultConfig());
+        Optional<DanteConfig> existingConfig = readConfig();
+        if (existingConfig.isPresent()) {
+            return existingConfig.get();
+        }
+        
+        // Si no existe configuración, crear una por defecto y guardarla
+        DanteConfig defaultConfig = createDefaultConfig();
+        saveConfig(defaultConfig);
+        return defaultConfig;
     }
     
     /**

@@ -8,6 +8,6 @@ public class WebController {
 
     @GetMapping("/")
     public String index() {
-        return "forward:/index.html";
+        return "forward:/html/index.html";
     }
 }
