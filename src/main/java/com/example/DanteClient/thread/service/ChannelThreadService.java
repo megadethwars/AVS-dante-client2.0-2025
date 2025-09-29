@@ -184,6 +184,13 @@ public class ChannelThreadService implements ThreadEventListener {
     }
     
     /**
+     * Obtiene un thread específico por ID de canal
+     */
+    public ChannelThread getChannelThreadById(int channelId) {
+        return activeThreads.get(channelId);
+    }
+    
+    /**
      * Obtiene la lista de todos los threads activos
      */
     public List<ChannelThread> getAllActiveThreads() {

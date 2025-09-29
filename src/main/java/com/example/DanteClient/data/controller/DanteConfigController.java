@@ -5,9 +5,16 @@ import com.example.DanteClient.data.model.Channel;
 import com.example.DanteClient.data.service.DanteConfigService;
 import com.example.DanteClient.data.exception.ConfigExceptions;
 import com.example.DanteClient.data.dto.SuccessResponse;
+import com.example.DanteClient.thread.service.ChannelThreadService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.time.LocalDateTime;
+import java.util.stream.Collectors;
 
 import java.util.Map;
 
@@ -21,7 +28,10 @@ public class DanteConfigController {
     
     @Autowired
     private DanteConfigService configService;
-    
+
+    @Autowired
+    private ChannelThreadService channelThreadService;
+
     /**
      * Obtiene la configuración completa
      */
@@ -187,5 +197,53 @@ public class DanteConfigController {
             "Servicio de configuración Dante funcionando correctamente", 
             statusData
         ));
+    }
+
+    /**
+     * Obtiene todos los canales con su estado de ejecución
+     * GET /api/config/channels/status
+     */
+    @GetMapping("/channels/status")
+    public ResponseEntity<?> getChannelsWithThreadStatus() {
+        try {
+            DanteConfig config = configService.getOrCreateConfig();
+            List<Map<String, Object>> channelsStatus = config.getChannels().stream()
+                .map(channel -> {
+                    HashMap<String, Object> channelInfo = new HashMap<>();
+                    channelInfo.put("id", channel.getId());
+                    channelInfo.put("name", channel.getName());
+                    channelInfo.put("enabled", channel.isEnabled());
+                    
+                    // Obtener estado del thread
+                    boolean isThreadRunning = channelThreadService.getChannelThreadById(channel.getId()) != null;
+                    channelInfo.put("isRunning", isThreadRunning);
+                    
+                    // Solo incluir startTime si el thread está activo
+                    if (isThreadRunning) {
+                        channelInfo.put("lastStartTime", 
+                            channelThreadService.getChannelThreadById(channel.getId())
+                                .getStartTime()
+                                .toString());
+                    }
+                    
+                    return channelInfo;
+                })
+                .collect(Collectors.toList());
+
+            HashMap<String, Object> response = new HashMap<>();
+            response.put("timestamp", LocalDateTime.now().toString());
+            response.put("totalChannels", channelsStatus.size());
+            response.put("activeThreads", channelsStatus.stream()
+                .filter(channel -> (boolean) channel.get("isRunning"))
+                .count());
+            response.put("channels", channelsStatus);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            HashMap<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("message", "Error al obtener el estado de los canales: " + e.getMessage());
+            return ResponseEntity.badRequest().body(errorResponse);
+        }
     }
 }

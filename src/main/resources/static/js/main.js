@@ -6,7 +6,16 @@ let threadSocket;
 function initWebSockets() {
     // WebSocket para control de volumen
     volumeSocket = new WebSocket('ws://localhost:8080/ws/volume');
-    volumeSocket.onopen = () => updateConnectionStatus('Conectado - Control de Volumen');
+   // Cargar los canales cuando se inicia la página
+window.addEventListener('load', () => {
+    getAllChannelStatus();  // Llamamos a getAllChannels cuando la página se carga
+    
+    // Actualizar el estado cada 5 segundos
+    setInterval(() => {
+        getAllChannelStatus();
+    }, 5000);
+});
+meSocket.onopen = () => updateConnectionStatus('Conectado - Control de Volumen');
     volumeSocket.onclose = () => updateConnectionStatus('Desconectado - Control de Volumen');
     volumeSocket.onerror = () => console.error('Error en la conexión de volumen');
 
@@ -67,12 +76,35 @@ async function getAllChannels() {
         if (!response.ok) {
             throw new Error('Error al obtener los canales');
         }
+        console.log('/api/config')
         const data = await response.json();
         if (!data.channels || !Array.isArray(data.channels)) {
             throw new Error('La respuesta no contiene un array de canales válido');
         }
         channels = data.channels;
-        console.log('Canales obtenidos:', channels);
+        console.log('Canales obtenidos sin status:', channels);
+        updateChannelsUI(channels);
+        return channels;
+    } catch (error) {
+        console.error('Error en la petición de canales:', error);
+        return [];
+    }
+}
+
+
+async function getAllChannelStatus() {
+    try {
+        const response = await fetch('/api/config/channels/status');
+        if (!response.ok) {
+            throw new Error('Error al obtener los canales');
+        }
+        console.log('/api/config/channels/status')
+        const data = await response.json();
+        if (!data.channels || !Array.isArray(data.channels)) {
+            throw new Error('La respuesta no contiene un array de canales válido');
+        }
+        channels = data.channels;
+        console.log('Canales obtenidos y status:', channels);
         updateChannelsUI(channels);
         return channels;
     } catch (error) {
@@ -101,10 +133,10 @@ function updateChannelsUI(channels) {
                     <h3>${channel.name || 'Canal ' + channel.id}</h3>
                     <div class="channel-controls">
                         <button 
-                            class="power-button ${channel.enabled ? 'on' : ''}" 
+                            class="power-button ${channel.isRunning ? 'on' : ''}" 
                             onclick="toggleChannel(${channel.id})"
                         >
-                            ${channel.enabled ? 'ON' : 'OFF'}
+                            ${channel.isRunning ? 'ON' : 'OFF'}
                         </button>
                         <div class="volume-control">
                             <input 
@@ -127,23 +159,124 @@ function updateChannelsUI(channels) {
     channelsList.innerHTML = html;
 }
 
+
+
+async function SendButtonCommandActivate(channelId) {
+    try {
+        // Primero, hacer la llamada a la API REST
+        const response = await fetch(`/api/threads/channel/${channelId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Error al crear el thread del canal');
+        }
+
+        const data = await response.json();
+        
+        if (data.success) {
+            // Si la API responde exitosamente, actualizar la UI
+            const channelElement = document.querySelector(`[data-channel-id="${channelId}"]`);
+            if (channelElement) {
+                const powerButton = channelElement.querySelector('.power-button');
+                if (powerButton) {
+                    powerButton.classList.add('on');
+                    powerButton.textContent = 'ON';
+                }
+            }
+            // Actualizar el estado
+            await getAllChannelStatus();
+
+            // Y enviar el estado por WebSocket
+            // if (volumeSocket && volumeSocket.readyState === WebSocket.OPEN) {
+            //     volumeSocket.send(JSON.stringify({
+            //         command: 'toggle',
+            //         channelId: channelId,
+            //         enabled: isEnabled
+            //     }));
+            // }
+
+            // Mostrar mensaje de éxito
+            console.log(`Canal ${data.channelName} activado exitosamente`);
+        } else {
+            throw new Error(data.message || 'Error al cambiar el estado del canal');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        // Revertir el cambio visual si hubo error
+        powerButton.classList.remove('on');
+        powerButton.textContent = 'OFF';
+        alert(`Error al cambiar el estado del canal ${channelId}: ${error.message}`);
+    }
+}
+
+async function SendButtonCommandDeactivate(channelId) {
+    try {
+        // Primero, hacer la llamada a la API REST
+        const response = await fetch(`/api/threads/channel/${channelId}`, {
+            method: 'DELETE',
+            headers: {
+            'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Error al crear el thread del canal');
+        }
+
+        const data = await response.json();
+        
+        if (data.success) {
+            // Si la API responde exitosamente, actualizar la UI
+            const channelElement = document.querySelector(`[data-channel-id="${channelId}"]`);
+            if (channelElement) {
+                const powerButton = channelElement.querySelector('.power-button');
+                if (powerButton) {
+                    powerButton.classList.remove('on');
+                    powerButton.textContent = 'OFF';
+                }
+            }
+            // Actualizar el estado
+            await getAllChannelStatus();
+
+            // Y enviar el estado por WebSocket
+            // if (volumeSocket && volumeSocket.readyState === WebSocket.OPEN) {
+            //     volumeSocket.send(JSON.stringify({
+            //         command: 'toggle',
+            //         channelId: channelId,
+            //         enabled: isEnabled
+            //     }));
+            // }
+
+            // Mostrar mensaje de éxito
+            console.log(`Canal ${data.channelName} desactivado exitosamente`);
+        } else {
+            throw new Error(data.message || 'Error al cambiar el estado del canal');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        // Revertir el cambio visual si hubo error
+        powerButton.classList.remove('on');
+        powerButton.textContent = 'OFF';
+        alert(`Error al cambiar el estado del canal ${channelId}: ${error.message}`);
+    }
+}
+
 // Función para cambiar el estado de un canal
-function toggleChannel(channelId) {
+async function toggleChannel(channelId) {
     const channelElement = document.querySelector(`[data-channel-id="${channelId}"]`);
     if (!channelElement) return;
 
     const powerButton = channelElement.querySelector('.power-button');
-    const isEnabled = powerButton.classList.toggle('on');
-    powerButton.textContent = isEnabled ? 'ON' : 'OFF';
+    const isEnabled = !powerButton.classList.contains('on'); // Verificar estado actual antes de cambiar
 
-    // Enviar el estado al servidor
-    if (volumeSocket && volumeSocket.readyState === WebSocket.OPEN) {
-        volumeSocket.send(JSON.stringify({
-            command: 'toggle',
-            channelId: channelId,
-            enabled: isEnabled
-        }));
-    }
+    if(isEnabled)
+        SendButtonCommandActivate(channelId);
+    else
+        SendButtonCommandDeactivate(channelId);
 }
 
 // Función para ajustar el volumen de un canal específico
@@ -157,7 +290,7 @@ function adjustChannelVolume(channelId, value) {
     }
 }
 
-// Cargar los canales cuando se inicia la página
-window.addEventListener('load', () => {
-    getAllChannels();  // Llamamos a getAllChannels cuando la página se carga
-});
+// // Cargar los canales cuando se inicia la página
+ window.addEventListener('load', () => {
+     getAllChannelStatus();  // Llamamos a getAllChannels cuando la página se carga
+ });
