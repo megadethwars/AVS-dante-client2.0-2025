@@ -227,6 +227,7 @@ public class ThreadWebSocketHandler extends TextWebSocketHandler {
      */
     public void notifyThreadFinished(int channelId, String channelName, String reason) {
         Map<String, Object> notification = new HashMap<>();
+        notification.put("status", "200");
         notification.put("type", "thread_finished");
         notification.put("channelId", channelId);
         notification.put("channelName", channelName);
@@ -243,6 +244,7 @@ public class ThreadWebSocketHandler extends TextWebSocketHandler {
      */
     public void notifyThreadException(int channelId, String channelName, String exceptionType, String errorMessage) {
         Map<String, Object> notification = new HashMap<>();
+        notification.put("status", "500");
         notification.put("type", "thread_exception");
         notification.put("channelId", channelId);
         notification.put("channelName", channelName);
@@ -261,6 +263,7 @@ public class ThreadWebSocketHandler extends TextWebSocketHandler {
     public void notifyThreadStatusChange(int channelId, String channelName, String oldStatus, String newStatus) {
         Map<String, Object> notification = new HashMap<>();
         notification.put("type", "thread_status_change");
+        notification.put("status", "300");
         notification.put("channelId", channelId);
         notification.put("channelName", channelName);
         notification.put("oldStatus", oldStatus);

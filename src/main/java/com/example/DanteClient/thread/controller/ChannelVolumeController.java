@@ -100,7 +100,7 @@ public class ChannelVolumeController {
                     .body("Canal con ID " + channelId + " no encontrado en la configuración");
         }
         
-        ChannelVolume channelVolume = channelVolumes.get(channelId);
+        
         
         int volumeLevel = volumeManager.getVolume(channelId);
         Map<String, Object> response = new HashMap<>();

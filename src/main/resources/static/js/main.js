@@ -37,6 +37,22 @@ function initWebSockets() {
                 // Actualizar la interfaz con la información de los hilos
                 threadStatus.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
             };
+        } else if (type === 'Control de Volumen') {
+            ws.onmessage = (event) => {
+                console.log('Mensaje recibido en socket de volumen:', event.data);
+                try {
+                    const data = JSON.parse(event.data);
+                    if (data.type === 'volume' && data.channelId) {
+                        console.log(`Actualizando volumen en UI: Canal ${data.channelId}, Volumen ${data.volumeLevel}`);
+                        const volumeSlider = document.querySelector(`[data-channel-id="${data.channelId}"] input[type="range"]`);
+                        if (volumeSlider) {
+                            volumeSlider.value = data.volumeLevel;
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error al procesar mensaje de volumen:', error);
+                }
+            };
         }
 
         return ws;
@@ -131,6 +147,64 @@ async function getAllChannelStatus() {
     }
 }
 
+
+function handleVolumeChange(channelId, value) {
+    console.log('======= AJUSTE DE VOLUMEN =======');
+    console.log('Canal ID:', channelId);
+    console.log('Nuevo valor:', value);
+    console.log('Tipo de channelId:', typeof channelId);
+    console.log('Tipo de value:', typeof value);
+    
+    // Verificar que los valores son válidos
+    if (!channelId || !value) {
+        console.error('Valores inválidos:', { channelId, value });
+        return;
+    }
+
+    // Verificar estado del socket
+    if (!volumeSocket) {
+        console.error('Socket no inicializado');
+        return;
+    }
+
+    console.log('Estado del socket:', volumeSocket.readyState);
+    
+    if (volumeSocket.readyState !== WebSocket.OPEN) {
+        console.error('Socket no está abierto');
+        return;
+    }
+
+    try {
+        // Construir el mensaje
+        const message = {
+            channelId: parseInt(channelId),
+            volume: parseInt(value)
+        };
+        
+        // Debug del mensaje
+        console.log('Mensaje a enviar:', JSON.stringify(message, null, 2));
+        
+        // Enviar el mensaje
+        volumeSocket.send(JSON.stringify(message));
+        console.log('Mensaje enviado correctamente');
+        
+        // Actualizar UI
+        const volumeSlider = document.querySelector(`[data-channel-id="${channelId}"] input[type="range"]`);
+        if (volumeSlider) {
+            volumeSlider.value = value;
+            console.log('UI actualizada');
+        } else {
+            console.error('No se encontró el slider en el DOM');
+        }
+    } catch (error) {
+        console.error('Error en adjustChannelVolume:', error);
+        console.error('Stack:', error.stack);
+    }
+    
+    console.log('======= FIN AJUSTE VOLUMEN =======');
+
+}
+
 // Función para actualizar la UI con los canales
 function updateChannelsUI(channels) {
     const channelsList = document.getElementById('channelsList');
@@ -140,6 +214,7 @@ function updateChannelsUI(channels) {
     channelsList.className = 'channels-grid';
     
     // Crear 32 espacios para canales (4x8)
+    console.log('Iniciando updateChannelsUI');
     const totalSlots = 32;
     let html = '';
     
@@ -162,7 +237,7 @@ function updateChannelsUI(channels) {
                                 min="0" 
                                 max="100" 
                                 value="${channel.volume !== undefined ? channel.volume : 0}" 
-                                onchange="adjustChannelVolume(${channel.id}, this.value)"
+                                oninput="handleVolumeChange(${channel.id}, this.value)"
                             >
                         </div>
                     </div>
@@ -299,13 +374,60 @@ async function toggleChannel(channelId) {
 
 // Función para ajustar el volumen de un canal específico
 function adjustChannelVolume(channelId, value) {
-    if (volumeSocket && volumeSocket.readyState === WebSocket.OPEN) {
-        volumeSocket.send(JSON.stringify({
-            command: 'volume',
-            channelId: channelId,
-            value: parseInt(value)
-        }));
+    // Debug básico
+    console.log('======= AJUSTE DE VOLUMEN =======');
+    console.log('Canal ID:', channelId);
+    console.log('Nuevo valor:', value);
+    console.log('Tipo de channelId:', typeof channelId);
+    console.log('Tipo de value:', typeof value);
+    
+    // Verificar que los valores son válidos
+    if (!channelId || !value) {
+        console.error('Valores inválidos:', { channelId, value });
+        return;
     }
+
+    // Verificar estado del socket
+    if (!volumeSocket) {
+        console.error('Socket no inicializado');
+        return;
+    }
+
+    console.log('Estado del socket:', volumeSocket.readyState);
+    
+    if (volumeSocket.readyState !== WebSocket.OPEN) {
+        console.error('Socket no está abierto');
+        return;
+    }
+
+    try {
+        // Construir el mensaje
+        const message = {
+            channelId: parseInt(channelId),
+            volume: parseInt(value)
+        };
+        
+        // Debug del mensaje
+        console.log('Mensaje a enviar:', JSON.stringify(message, null, 2));
+        
+        // Enviar el mensaje
+        volumeSocket.send(JSON.stringify(message));
+        console.log('Mensaje enviado correctamente');
+        
+        // Actualizar UI
+        const volumeSlider = document.querySelector(`[data-channel-id="${channelId}"] input[type="range"]`);
+        if (volumeSlider) {
+            volumeSlider.value = value;
+            console.log('UI actualizada');
+        } else {
+            console.error('No se encontró el slider en el DOM');
+        }
+    } catch (error) {
+        console.error('Error en adjustChannelVolume:', error);
+        console.error('Stack:', error.stack);
+    }
+    
+    console.log('======= FIN AJUSTE VOLUMEN =======');
 }
 
 // // Cargar los canales cuando se inicia la página

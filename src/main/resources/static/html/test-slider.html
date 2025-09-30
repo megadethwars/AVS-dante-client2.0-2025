@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Slider</title>
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+        .slider-container {
+            width: 300px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #f5f5f5;
+        }
+        .volume-slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+        #volumeValue {
+            text-align: center;
+            font-size: 18px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="slider-container" id="slidersContainer">
+    </div>
+
+    <script>
+        const slidersContainer = document.getElementById('slidersContainer');
+        
+        // Crear tres sliders
+        for(let i = 1; i <= 3; i++) {
+            const sliderDiv = document.createElement('div');
+            sliderDiv.innerHTML = `
+                <input 
+                    type="range" 
+                    class="volume-slider" 
+                    id="volumeSlider${i}"
+                    min="0" 
+                    max="100" 
+                    value="50"
+                    oninput="handleVolumeChange(${i}, this.value)"
+                >
+                <div id="volumeValue${i}">Volumen ${i}: 50</div>
+            `;
+            slidersContainer.appendChild(sliderDiv);
+        }
+
+        // Obtener referencias a los sliders
+        const sliders = document.querySelectorAll('.volume-slider');
+
+        // Función para manejar el cambio de volumen
+        function handleVolumeChange(sliderId, value) {
+            console.log(`Valor del slider ${sliderId}:`, value);
+            document.getElementById(`volumeValue${sliderId}`).textContent = `Volumen ${sliderId}: ${value}`;
+        }
+
+        // Agregar event listeners a cada slider
+        sliders.forEach((slider, index) => {
+            const sliderId = index + 1;
+            slider.addEventListener('change', (event) => {
+                console.log(`Valor final del slider ${sliderId}:`, event.target.value);
+            });
+            slider.addEventListener('mousedown', () => {
+                console.log(`Inicio de arrastre del slider ${sliderId}`);
+            });
+            slider.addEventListener('mouseup', () => {
+                console.log(`Fin de arrastre del slider ${sliderId}`);
+            });
+        });
+    </script>
+</body>
+</html>
