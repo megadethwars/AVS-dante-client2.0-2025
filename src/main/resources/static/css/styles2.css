@@ -17,6 +17,25 @@
 .header {
     text-align: center;
     margin-bottom: 30px;
+    position: relative;  /* Para que el indicador absoluto se posicione respecto al header */
+}
+
+.connection-indicator {
+    position: absolute;
+    top: 15px;
+    right: 30px;
+    display: flex;
+    align-items: center;
+}
+
+.connection-icon {
+    width: 48px;
+    height: 48px;
+    transition: transform 0.3s ease;  /* Agregado para una posible animación */
+}
+
+.connection-icon:hover {
+    transform: scale(1.1);  /* Efecto sutil al pasar el mouse */
 }
 
 .controls {
