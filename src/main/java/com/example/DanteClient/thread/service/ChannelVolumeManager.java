@@ -8,6 +8,7 @@ import jakarta.annotation.PostConstruct;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.List;
+import com.example.DanteClient.thread.model.ChannelThread;
 
 /**
  * Singleton que maneja los volúmenes de los canales en memoria
@@ -17,12 +18,16 @@ public class ChannelVolumeManager {
     
     private static volatile ChannelVolumeManager instance;
     private final ConcurrentHashMap<Integer, Integer> channelVolumes;
+    private final ConcurrentHashMap<Integer, Integer> previousVolumes;
     
     @Autowired
     private DanteConfigService configService;
+
+   
     
     private ChannelVolumeManager() {
         this.channelVolumes = new ConcurrentHashMap<>();
+        this.previousVolumes = new ConcurrentHashMap<>();
     }
     
     /**
@@ -122,4 +127,85 @@ public class ChannelVolumeManager {
         channelVolumes.remove(channelId);
         System.out.println("Canal " + channelId + " eliminado del gestor de volúmenes");
     }
+
+    @Autowired
+    private ChannelThreadService threadService;
+
+    /**
+     * Silencia todos los canales activos excepto el especificado, estableciendo su volumen a 0.
+     * Solo silencia los canales que tienen threads activos.
+     * @param channelId El ID del canal que no será silenciado.
+     * @return true si al menos un canal activo fue silenciado, false en caso contrario.
+     */
+    public boolean muteAllExcept(int channelId) {
+        boolean muted = false;
+        previousVolumes.clear(); // Limpiar volúmenes anteriores
+        
+        // Obtener todos los threads activos
+        for (Integer id : channelVolumes.keySet()) {
+            // Solo procesar si es diferente al canal especificado
+            if (id != channelId) {
+                // Verificar si el thread está activo usando ChannelThreadService
+                if (threadService.isThreadActive(id)) {
+                    // Solo silenciar si el volumen no es 0
+                    int currentVolume = channelVolumes.get(id);
+                    if (currentVolume != 0) {
+                        previousVolumes.put(id, currentVolume); // Guardar volumen anterior
+                        setVolume(id, 0); // Usar el método setVolume para mantener consistencia
+                        ChannelThread channelThread = threadService.getThreadInfo(id);
+                        if (channelThread != null) {
+                            channelThread.setVolume(0);
+                        }
+                        muted = true;
+                        System.out.println("Canal " + id + " (activo) ha sido silenciado. Volumen anterior: " + currentVolume);
+                    }
+                } else {
+                    System.out.println("Canal " + id + " está inactivo, no se silencia.");
+                }
+            }
+        }
+        
+        if (muted) {
+            System.out.println("Se han silenciado todos los canales activos excepto " + channelId);
+        } else {
+            System.out.println("No se encontraron otros canales activos para silenciar.");
+        }
+        
+        return muted;
+    }
+
+    /**
+     * Restaura los volúmenes de los canales que fueron silenciados previamente.
+     * @return true si al menos un canal fue restaurado, false si no hay canales para restaurar.
+     */
+    public boolean unmuteChannels() {
+        boolean restored = false;
+        
+        for (Integer id : previousVolumes.keySet()) {
+            // Solo restaurar si el thread sigue activo
+            if (threadService.isThreadActive(id)) {
+                int previousVolume = previousVolumes.get(id);
+                setVolume(id, previousVolume); // Usar el método setVolume para mantener consistencia
+                ChannelThread channelThread = threadService.getThreadInfo(id);
+                if (channelThread != null) {
+                    channelThread.setVolume(previousVolume);
+                }
+                restored = true;
+                System.out.println("Canal " + id + " restaurado a volumen: " + previousVolume);
+            } else {
+                System.out.println("Canal " + id + " ya no está activo, no se restaura.");
+            }
+        }
+        
+        if (restored) {
+            System.out.println("Se han restaurado los volúmenes de los canales previamente silenciados.");
+        } else {
+            System.out.println("No hay canales para restaurar.");
+        }
+        
+        previousVolumes.clear(); // Limpiar el mapa después de restaurar
+        return restored;
+    }
+
+
 }

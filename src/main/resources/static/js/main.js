@@ -125,27 +125,7 @@ function setupReconnection(socket, socketType) {
 // Variable global para almacenar los canales
 let channels = [];
 
-// obtener los canales
-async function getAllChannels() {
-    try {
-        const response = await fetch('/api/config');
-        if (!response.ok) {
-            throw new Error('Error al obtener los canales');
-        }
-        console.log('/api/config')
-        const data = await response.json();
-        if (!data.channels || !Array.isArray(data.channels)) {
-            throw new Error('La respuesta no contiene un array de canales válido');
-        }
-        channels = data.channels;
-        console.log('Canales obtenidos sin status:', channels);
-        updateChannelsUI(channels);
-        return channels;
-    } catch (error) {
-        console.error('Error en la petición de canales:', error);
-        return [];
-    }
-}
+
 
 
 async function getAllChannelStatus() {

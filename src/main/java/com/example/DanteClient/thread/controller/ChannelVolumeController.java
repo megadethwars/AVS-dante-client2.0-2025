@@ -254,4 +254,67 @@ public class ChannelVolumeController {
         
         return ResponseEntity.ok(response);
     }
+
+    /**
+     * Silencia todos los canales activos excepto el especificado
+     * PUT /api/volume/mute-all-except/{channelId}
+     */
+    @PutMapping("/mute-all-except/{channelId}")
+    public ResponseEntity<?> muteAllExcept(@PathVariable int channelId) {
+        // Validar que el canal existe
+        Channel channel = ConfigUtil.getChannelById(channelId);
+        if (channel == null) {
+            return ResponseEntity.badRequest()
+                    .body("Canal con ID " + channelId + " no encontrado en la configuración");
+        }
+
+        boolean muted = volumeManager.muteAllExcept(channelId);
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", muted ? 
+            "Se han silenciado todos los canales activos excepto el canal " + channelId :
+            "No se encontraron otros canales activos para silenciar");
+        response.put("exceptedChannelId", channelId);
+        response.put("exceptedChannelName", channel.getName());
+        response.put("actionPerformed", muted);
+        response.put("timestamp", java.time.LocalDateTime.now());
+        
+        // Notificar a todos los clientes WebSocket sobre el cambio masivo
+        String notificationJson = String.format(
+            "{\"type\":\"massVolumeUpdate\",\"action\":\"muteAllExcept\",\"exceptedChannelId\":%d,\"timestamp\":\"%s\"}",
+            channelId,
+            java.time.LocalDateTime.now().toString()
+        );
+        //webSocketHandler.broadcastMessage(notificationJson);
+        
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Restaura los volúmenes de los canales que fueron silenciados previamente
+     * PUT /api/volume/unmute-channels
+     */
+    @PutMapping("/unmute-channels")
+    public ResponseEntity<?> unmuteChannels() {
+        boolean restored = volumeManager.unmuteChannels();
+        
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        response.put("message", restored ? 
+            "Se han restaurado los volúmenes de los canales previamente silenciados" :
+            "No hay canales para restaurar");
+        response.put("actionPerformed", restored);
+        response.put("timestamp", java.time.LocalDateTime.now());
+        
+        // Notificar a todos los clientes WebSocket sobre la restauración de volúmenes
+        String notificationJson = String.format(
+            "{\"type\":\"massVolumeUpdate\",\"action\":\"unmuteChannels\",\"timestamp\":\"%s\"}",
+            java.time.LocalDateTime.now().toString()
+        );
+        //webSocketHandler.broadcastMessage(notificationJson);
+        
+        return ResponseEntity.ok(response);
+    }
+
 }
