@@ -224,4 +224,9 @@ public class ServerPingService {
         
         return status;
     }
+
+    public void turnOFFSystem(){
+        System.out.println("Apagando sistema...");
+        System.exit(0);
+    }
 }

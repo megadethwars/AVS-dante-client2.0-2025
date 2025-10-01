@@ -236,4 +236,24 @@ public class ServerStatusController {
             return ResponseEntity.status(500).body(error);
         }
     }
+
+
+
+    @GetMapping("/powerDown")
+    public ResponseEntity<?> powerDownSystem() {
+        try {
+            serverPingService.turnOFFSystem();
+            Map<String, Object> response = new HashMap<>();
+            response.put("status", "SUCCESS");
+            response.put("message", "Sistema apagado correctamente");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> error = new HashMap<>();
+            error.put("status", "ERROR");
+            error.put("message", e.getMessage());
+            return ResponseEntity.status(500).body(error);
+        }
+    }
+
+            
 }

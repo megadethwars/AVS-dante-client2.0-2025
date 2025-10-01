@@ -94,10 +94,10 @@ function updateConnectionStatus(status) {
     console.log('Entrando a la actualización de iconos:', status);
     if (connectionIcon) {
         if (status.includes('Conectado')) {
-            connectionIcon.src = '../images/verde.png';
+            connectionIcon.src = '/images/alerta.png';
             connectionIcon.alt = 'Conexión establecida';
         } else {
-            connectionIcon.src = '../images/alerta.png';
+            connectionIcon.src = '/images/alerta.png';
             connectionIcon.alt = 'Conexión perdida';
         }
     }
@@ -395,12 +395,86 @@ async function toggleChannel(channelId) {
 }
 
 
-// // Cargar los canales cuando se inicia la página
- window.addEventListener('load', () => {
-     getAllChannelStatus();  // Llamamos a getAllChannels cuando la página se carga
+// Función para precargar y almacenar las imágenes en caché
+async function cacheStatusImages() {
+    const imagesToCache = [
+        '/images/verde.png',
+        '/images/rojo.png',
+        '/images/alerta.png'
+    ];
 
-     initWebSockets();
- });
+    // Verificar si el navegador soporta Cache Storage API
+    if ('caches' in window) {
+        try {
+            const cache = await caches.open('status-images-cache');
+            
+            // Almacenar cada imagen en la caché
+            for (const imageUrl of imagesToCache) {
+                try {
+                    const response = await fetch(imageUrl);
+                    if (response.ok) {
+                        await cache.put(imageUrl, response.clone());
+                        console.log(`Imagen ${imageUrl} almacenada en caché`);
+                    }
+                } catch (error) {
+                    console.error(`Error al cachear ${imageUrl}:`, error);
+                }
+            }
+        } catch (error) {
+            console.error('Error al inicializar la caché:', error);
+        }
+    }
+}
+
+// Función modificada para obtener imágenes de la caché si no hay conexión
+async function getStatusImage(imagePath) {
+    if ('caches' in window) {
+        try {
+            const cache = await caches.open('status-images-cache');
+            const cachedResponse = await cache.match(imagePath);
+            if (cachedResponse) {
+                return URL.createObjectURL(await cachedResponse.blob());
+            }
+        } catch (error) {
+            console.error('Error al obtener imagen de caché:', error);
+        }
+    }
+    return imagePath; // Retorna la ruta original si no se encuentra en caché
+}
+
+// Modificar updateConnectionStatus para usar la caché
+async function updateConnectionStatus(status) {
+    const statusElement = document.getElementById('connectionStatus');
+    const connectionIcon = document.querySelector('.connection-indicator img');
+
+    if (statusElement) {
+        statusElement.textContent = status;
+    }
+
+    if (connectionIcon) {
+        let imagePath;
+        if (status.includes('Conectado')) {
+            imagePath = '/images/verde.png';
+        } else if (status.includes('Error')) {
+            imagePath = '/images/rojo.png';
+        } else {
+            imagePath = '/images/alerta.png';
+        }
+        
+        // Intentar obtener la imagen de la caché
+        connectionIcon.src = await getStatusImage(imagePath);
+        connectionIcon.alt = status;
+    }
+
+    console.log('Estado de conexión:', status);
+}
+
+// Cargar los canales cuando se inicia la página
+window.addEventListener('load', async () => {
+    await cacheStatusImages();  // Precargar imágenes en caché
+    getAllChannelStatus();      // Llamar a getAllChannels
+    initWebSockets();          // Inicializar WebSockets
+});
 
 /**
  * Borra la caché del navegador para este sitio.
