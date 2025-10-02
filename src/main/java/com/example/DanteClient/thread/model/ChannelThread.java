@@ -81,12 +81,21 @@ public class ChannelThread {
     }
     
     /**
-     * Detiene el thread de forma segura
+     * Detiene el thread de forma segura e inmediata
      */
     public void stop() {
         running.set(false);
         status = "STOPPING";
         currentTask = "Deteniendo thread...";
+        
+        // Cerrar el socket inmediatamente para interrumpir socket.receive()
+        try {
+            if (socket != null && !socket.isClosed()) {
+                socket.close();
+            }
+        } catch (Exception e) {
+            System.out.println("Error al cerrar socket en stop(): " + e.getMessage());
+        }
         
         if (future != null && !future.isDone()) {
             future.cancel(true);
@@ -190,7 +199,7 @@ public class ChannelThread {
              sourceline = (SourceDataLine)AudioSystem.getLine(info);
              sourceline.open(format);
              FloatControl control = (FloatControl)sourceline.getControl(FloatControl.Type.MASTER_GAIN);
-             //control.setValue(100.0f);
+          
              sourceline.start();
              
          } catch (LineUnavailableException ex) {
@@ -290,52 +299,53 @@ public class ChannelThread {
     }
 
 
-    private void ProcessAudio(){
+    private void ProcessAudio() throws Exception {
         try {
             socket.receive(PaqueteCliente);
-                //Sock.receive(PaqueteCliente);
                
-                for(int x=0;x<(chunkSize*2);x+=2){
-                    sonido[x+1]= (PaqueteCliente.getData()[x+channelId]);
-                    sonido[x]= (PaqueteCliente.getData()[x+1+channelId]);
-                    
-                    b1=sonido[x];
-                    b2=sonido[x+1];
-              
-                    
-                    y=ByteBuffer.wrap(new byte[]{b1,b2}).getShort();
-                    
-                    
-                    y/=pot;
-                    
-                    y*=volume/10.0;
-                   
-                    s3=y;
-                    b2=(byte)s3;   ///lsb
-                    s3>>=8;
-                    s3=(short) (s3);  ////msb
-                    b1=(byte)s3;
-                 
-                    
-                    sonido[x]=b1;          /////msb
-                    sonido[x+1]=b2;            
-                         
-                  
-                }
-               
-                    
-                sourceline.write(sonido,0,sonido.length);
+            for(int x=0;x<(chunkSize*2);x+=2){
+                sonido[x+1]= (PaqueteCliente.getData()[x+channelId]);
+                sonido[x]= (PaqueteCliente.getData()[x+1+channelId]);
                 
-                System.out.println("hilo finalizado ");
-            
-            socket.disconnect();
-            socket.close();
+                b1=sonido[x];
+                b2=sonido[x+1];
           
-            System.out.println("FINALIZADO");
-        } catch (Exception e) {
-            System.out.println("Error al recibir el paquete: " + e.getMessage());
+                y=ByteBuffer.wrap(new byte[]{b1,b2}).getShort();
+                
+                y/=pot;
+                
+                y*=volume/10.0;
+               
+                s3=y;
+                b2=(byte)s3;   ///lsb
+                s3>>=8;
+                s3=(short) (s3);  ////msb
+                b1=(byte)s3;
+             
+                sonido[x]=b1;          /////msb
+                sonido[x+1]=b2;            
+            }
+           
+            sourceline.write(sonido,0,sonido.length);
+            
+        } catch (java.net.SocketException e) {
+            if (!running.get()) {
+                // Es una interrupción normal del socket por stop()
+                System.out.println("Socket cerrado durante la detención del thread - Canal " + channelId);
+                return;
+            }
+            // Si running es true, entonces es un error real
+            System.out.println("Error de socket en canal " + channelId + ": " + e.getMessage());
             updateStatus("ERROR");
-            updateCurrentTask("Error al recibir audio: " + e.getMessage());
+            updateCurrentTask("Error de socket: " + e.getMessage());
+            throw e;
+        } catch (Exception e) {
+            if (running.get()) {
+                System.out.println("Error al procesar audio en canal " + channelId + ": " + e.getMessage());
+                updateStatus("ERROR");
+                updateCurrentTask("Error al procesar audio: " + e.getMessage());
+                throw e;
+            }
         }
     }
 
@@ -378,17 +388,13 @@ public class ChannelThread {
             updateCurrentTask("Ejecutando bucle principal");
             
             while (running.get()) {
-                System.out.println("estoy corriendo - Canal " + channelId + " (" + channelName + ") - Volumen: " + volume + "%");
-                
-                // Simular procesamiento de audio con el volumen actual
                 if (volume > 0) {
                     updateCurrentTask("Procesando audio - Vol: " + volume + "%");
+                    ProcessAudio();
                 } else {
                     updateCurrentTask("Silenciado - Vol: 0%");
+                    Thread.sleep(1000); // Esperar si está silenciado
                 }
-                
-                // Esperar 1 segundo
-                Thread.sleep(1000);
             }
             
             updateStatus("FINISHED");
