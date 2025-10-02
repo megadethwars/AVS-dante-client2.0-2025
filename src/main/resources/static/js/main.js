@@ -285,14 +285,7 @@ async function SendButtonCommandActivate(channelId) {
             // Actualizar el estado
             await getAllChannelStatus();
 
-            // Y enviar el estado por WebSocket
-            // if (volumeSocket && volumeSocket.readyState === WebSocket.OPEN) {
-            //     volumeSocket.send(JSON.stringify({
-            //         command: 'toggle',
-            //         channelId: channelId,
-            //         enabled: isEnabled
-            //     }));
-            // }
+     
 
             // Mostrar mensaje de éxito
             console.log(`Canal ${data.channelName} activado exitosamente`);
@@ -337,14 +330,7 @@ async function SendButtonCommandDeactivate(channelId) {
             // Actualizar el estado
             await getAllChannelStatus();
 
-            // Y enviar el estado por WebSocket
-            // if (volumeSocket && volumeSocket.readyState === WebSocket.OPEN) {
-            //     volumeSocket.send(JSON.stringify({
-            //         command: 'toggle',
-            //         channelId: channelId,
-            //         enabled: isEnabled
-            //     }));
-            // }
+       
 
             // Mostrar mensaje de éxito
             console.log(`Canal ${data.channelName} desactivado exitosamente`);

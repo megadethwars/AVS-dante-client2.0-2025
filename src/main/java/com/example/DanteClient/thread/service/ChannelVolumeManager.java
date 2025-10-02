@@ -19,6 +19,7 @@ public class ChannelVolumeManager {
     private static volatile ChannelVolumeManager instance;
     private final ConcurrentHashMap<Integer, Integer> channelVolumes;
     private final ConcurrentHashMap<Integer, Integer> previousVolumes;
+    private final ConcurrentHashMap<Integer, Boolean> threadActiveStates; // true = activo y no muteado
     
     @Autowired
     private DanteConfigService configService;
@@ -28,6 +29,7 @@ public class ChannelVolumeManager {
     private ChannelVolumeManager() {
         this.channelVolumes = new ConcurrentHashMap<>();
         this.previousVolumes = new ConcurrentHashMap<>();
+        this.threadActiveStates = new ConcurrentHashMap<>();
     }
     
     /**
@@ -52,9 +54,10 @@ public class ChannelVolumeManager {
         // Obtener los canales de la configuración
         List<Channel> channels = configService.getOrCreateConfig().getChannels();
         
-        // Inicializar los volúmenes a 0 para cada canal
+        // Inicializar los volúmenes y estados para cada canal
         channels.forEach(channel -> {
             channelVolumes.put(channel.getId(), 0);
+            threadActiveStates.put(channel.getId(), false); // Inicialmente todos inactivos
         });
         
         System.out.println("ChannelVolumeManager inicializado con " + channels.size() + " canales");
@@ -80,6 +83,13 @@ public class ChannelVolumeManager {
      */
     public int getVolume(int channelId) {
         return channelVolumes.getOrDefault(channelId, 0);
+    }
+
+    /**
+     * Obtener el volumen actual de un canal
+     */
+    public boolean getMutedThreadStatus(int channelId) {
+        return threadActiveStates.getOrDefault(channelId, false);
     }
     
     /**
@@ -156,12 +166,16 @@ public class ChannelVolumeManager {
                         if (channelThread != null) {
                             channelThread.setVolume(0);
                         }
+                        threadActiveStates.put(id, false); // Marcar como muteado
                         muted = true;
                         System.out.println("Canal " + id + " (activo) ha sido silenciado. Volumen anterior: " + currentVolume);
                     }
                 } else {
+                    threadActiveStates.put(id, false); // Marcar como inactivo
                     System.out.println("Canal " + id + " está inactivo, no se silencia.");
                 }
+            } else {
+                threadActiveStates.put(id, true); // Marcar el canal no muteado como activo
             }
         }
         
@@ -178,6 +192,23 @@ public class ChannelVolumeManager {
      * Restaura los volúmenes de los canales que fueron silenciados previamente.
      * @return true si al menos un canal fue restaurado, false si no hay canales para restaurar.
      */
+    /**
+     * Obtiene el estado de actividad de un thread específico
+     * @param channelId ID del canal
+     * @return true si el thread está activo y no muteado, false en caso contrario
+     */
+    public boolean isThreadActive(int channelId) {
+        return threadActiveStates.getOrDefault(channelId, false);
+    }
+
+    /**
+     * Obtiene un mapa con todos los estados de los threads
+     * @return Mapa con los estados de los threads
+     */
+    public ConcurrentHashMap<Integer, Boolean> getThreadStates() {
+        return new ConcurrentHashMap<>(threadActiveStates);
+    }
+
     public boolean unmuteChannels() {
         boolean restored = false;
         
@@ -190,9 +221,11 @@ public class ChannelVolumeManager {
                 if (channelThread != null) {
                     channelThread.setVolume(previousVolume);
                 }
+                threadActiveStates.put(id, false); 
                 restored = true;
                 System.out.println("Canal " + id + " restaurado a volumen: " + previousVolume);
             } else {
+                threadActiveStates.put(id, false); // Mantener como inactivo
                 System.out.println("Canal " + id + " ya no está activo, no se restaura.");
             }
         }

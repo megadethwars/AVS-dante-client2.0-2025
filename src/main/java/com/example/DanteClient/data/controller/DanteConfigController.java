@@ -222,6 +222,10 @@ public class DanteConfigController {
                     // Obtener estado del thread
                     boolean isThreadRunning = channelThreadService.getChannelThreadById(channel.getId()) != null;
                     channelInfo.put("isRunning", isThreadRunning);
+
+                    // Obtener estado de hilos muteados
+                    boolean isThreadMuted = volumeManager.getMutedThreadStatus(channel.getId());
+                    channelInfo.put("SoloMutedThread", isThreadMuted);
                     
                     // Solo incluir startTime si el thread está activo
                     if (isThreadRunning) {

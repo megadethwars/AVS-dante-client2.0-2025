@@ -388,13 +388,17 @@ public class ChannelThread {
             updateCurrentTask("Ejecutando bucle principal");
             
             while (running.get()) {
-                if (volume > 0) {
-                    updateCurrentTask("Procesando audio - Vol: " + volume + "%");
-                    ProcessAudio();
-                } else {
-                    updateCurrentTask("Silenciado - Vol: 0%");
-                    Thread.sleep(1000); // Esperar si está silenciado
-                }
+                // if (volume > 0) {
+                //     updateCurrentTask("Procesando audio - Vol: " + volume + "%");
+                //     //ProcessAudio();
+                // } else {
+                //     updateCurrentTask("Silenciado - Vol: 0%");
+                //     Thread.sleep(1000); // Esperar si está silenciado
+                // }
+
+                 updateCurrentTask("Procesando audio - Vol: " + volume + "%");
+                 System.out.println("Procesando audio - Vol: " + volume + "%");
+                 Thread.sleep(1000);
             }
             
             updateStatus("FINISHED");
