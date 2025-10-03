@@ -33,10 +33,62 @@ function initWebSockets() {
 
         if (type === 'Monitoreo de Hilos') {
             ws.onmessage = (event) => {
-                const threadStatus = document.getElementById('threadStatus');
-                const data = JSON.parse(event.data);
-                // Actualizar la interfaz con la información de los hilos
-                threadStatus.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('Thread WebSocket mensaje recibido:', data);
+
+                    // Manejar diferentes tipos de eventos
+                    switch (data.type) {
+                        
+                        case 'threadFinished':
+                            console.log(`Thread finalizado - Canal ${data.channelId} (${data.channelName}) - Razón: ${data.reason}`);
+                            updateChannelStatus(data.channelId, false);
+                            updateChannelStatusWithState(data.channelId, 'STOPPED');
+                            break;
+
+                        case 'thread_exception':
+                            console.error(`Error en thread - Canal ${data.channelId} (${data.channelName}): ${data.errorMessage}`);
+                            updateChannelStatus(data.channelId, false);
+                            updateChannelStatusWithState(data.channelId, 'ERROR');
+                            showThreadError(data.channelId, data.errorMessage);
+                            break;
+
+                        case 'thread_status_change':
+                            console.log(`Estado del thread cambiado - Canal ${data.channelId}: ${data.oldStatus} -> ${data.newStatus}`);
+                            if (data.newStatus) {
+                                updateChannelStatusWithState(data.channelId, data.newStatus);
+                            } else {
+                                console.warn('Estado nuevo no definido en thread_status_change');
+                            }
+                            break;
+
+                        case 'thread_finished':
+                            console.log(`Thread finalizado - Canal ${data.channelId}`);
+                            updateChannelStatus(data.channelId, false);
+                            updateChannelStatusWithState(data.channelId, 'STOPPED');
+                            break;
+
+                        case 'massVolumeUpdate':
+                            if (data.action === 'muteAllExcept') {
+                                console.log(`Silenciando todos los canales excepto ${data.exceptedChannelId}`);
+                                updateChannelsAfterMute(data.exceptedChannelId);
+                            } else if (data.action === 'unmuteChannels') {
+                                console.log('Restaurando volúmenes de canales');
+                                refreshChannelVolumes();
+                            }
+                            break;
+
+                        default:
+                            console.log('Mensaje de thread no manejado:', data);
+                            // Mantener el comportamiento anterior para mensajes desconocidos
+                            const threadStatus = document.getElementById('threadStatus');
+                            if (threadStatus) {
+                                threadStatus.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                            }
+                    }
+                } catch (error) {
+                    console.error('Error al procesar mensaje del WebSocket de threads:', error);
+                }
             };
         } else if (type === 'Control de Volumen') {
             ws.onmessage = (event) => {
@@ -333,7 +385,7 @@ async function SendButtonCommandDeactivate(channelId) {
        
 
             // Mostrar mensaje de éxito
-            console.log(`Canal ${data.channelName} desactivado exitosamente`);
+            console.log(`Canal ${channelId} desactivado exitosamente`);
         } else {
             throw new Error(data.message || 'Error al cambiar el estado del canal');
         }
@@ -360,6 +412,116 @@ async function toggleChannel(channelId) {
         SendButtonCommandDeactivate(channelId);
 }
 
+
+// Funciones auxiliares para el manejo de eventos de threads
+function updateChannelStatus(channelId, isRunning) {
+    const channelElement = document.querySelector(`[data-channel-id="${channelId}"]`);
+    if (channelElement) {
+        const powerButton = channelElement.querySelector('.power-button');
+        if (powerButton) {
+            if (isRunning) {
+                powerButton.classList.add('on');
+                powerButton.textContent = 'ON';
+            } else {
+                powerButton.classList.remove('on');
+                powerButton.textContent = 'OFF';
+            }
+        }
+    }
+}
+
+function updateChannelStatusWithState(channelId, status) {
+    const channelElement = document.querySelector(`[data-channel-id="${channelId}"]`);
+    if (!channelElement) {
+        console.warn(`No se encontró elemento para el canal ${channelId}`);
+        return;
+    }
+
+    // Validar que status no sea undefined o null
+    if (!status) {
+        console.warn(`Estado indefinido para el canal ${channelId}`);
+        return;
+    }
+
+    // Convertir a minúsculas de forma segura
+    const statusLower = status.toString().toLowerCase();
+    
+    // Actualizar clases CSS según el estado
+    channelElement.classList.remove('running', 'error', 'stopped');
+    channelElement.classList.add(statusLower);
+
+    // Actualizar el botón de encendido si corresponde
+    const powerButton = channelElement.querySelector('.power-button');
+    if (powerButton) {
+        if (status === 'RUNNING') {
+            powerButton.classList.add('on');
+            powerButton.textContent = 'ON';
+        } else {
+            console.log('Cambiando botón a OFF para estado:', status);
+            powerButton.classList.remove('on');
+            powerButton.textContent = 'OFF';
+        }
+    }
+
+    // Log para debugging
+    console.log(`Estado actualizado para canal ${channelId}: ${status}`);
+}
+
+
+function showThreadError(channelId, errorMessage) {
+    const channelElement = document.querySelector(`[data-channel-id="${channelId}"]`);
+    if (channelElement) {
+        // Agregar clase de error
+        channelElement.classList.add('error');
+        
+        // Mostrar mensaje de error
+        const errorElement = channelElement.querySelector('.error-message') || 
+                           document.createElement('div');
+        errorElement.className = 'error-message';
+        errorElement.textContent = errorMessage;
+        
+        if (!channelElement.querySelector('.error-message')) {
+            channelElement.appendChild(errorElement);
+        }
+
+        // Remover el mensaje después de 5 segundos
+        setTimeout(() => {
+            errorElement.remove();
+            channelElement.classList.remove('error');
+        }, 5000);
+    }
+}
+
+function updateChannelsAfterMute(exceptedChannelId) {
+    // Actualizar UI para reflejar el estado de mute
+    document.querySelectorAll('.channel-item').forEach(channelElement => {
+        const channelId = parseInt(channelElement.dataset.channelId);
+        const volumeSlider = channelElement.querySelector('input[type="range"]');
+        
+        if (volumeSlider && channelId !== exceptedChannelId) {
+            volumeSlider.value = 0;
+        }
+    });
+}
+
+function refreshChannelVolumes() {
+    // Actualizar los volúmenes de todos los canales desde el servidor
+    fetch('/api/volume/channels')
+        .then(response => response.json())
+        .then(data => {
+            if (data.volumes) {
+                Object.entries(data.volumes).forEach(([channelId, volumeInfo]) => {
+                    const volumeSlider = document.querySelector(
+                        `[data-channel-id="${channelId}"] input[type="range"]`
+                    );
+                    if (volumeSlider) {
+                        volumeSlider.value = volumeInfo.volumeLevel;
+                    }
+                });
+            }
+        })
+        .catch(error => console.error('Error al actualizar volúmenes:', error));
+}
 
 // Función para precargar y almacenar las imágenes en caché
 async function cacheStatusImages() {
