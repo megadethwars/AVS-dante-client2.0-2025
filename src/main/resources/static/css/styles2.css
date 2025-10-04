@@ -198,3 +198,20 @@ button:hover {
     font-family: monospace;
     font-size: 0.9em;
 }
+
+
+
+.solo-button {
+    width: 100%;
+    padding: 8px;
+    background-color: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+.solo-button.on {
+    background-color: #28a745;
+}

@@ -294,6 +294,12 @@ function updateChannelsUI(channels) {
                                 oninput="handleVolumeChange(${channel.id}, this.value)"
                             >
                         </div>
+                        <button 
+                            class="solo-button ${channel.SoloMutedThread ? 'on' : ''}" 
+                            onclick="toggleSolo(${channel.id})"
+                        >
+                            ${channel.SoloMutedThread ? 'ON' : 'OFF'}
+                        </button>
                     </div>
                 </div>
             `;
@@ -398,6 +404,98 @@ async function SendButtonCommandDeactivate(channelId) {
     }
 }
 
+
+async function SendButtonCommandSolo(channelId) {
+    try {
+        // Primero, hacer la llamada a la API REST
+        const response = await fetch(`/api/volume/mute-all-except/${channelId}`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Error al crear el thread del canal');
+        }
+
+        const data = await response.json();
+
+        if (data.success && data.actionPerformed == true) {
+            // Si la API responde exitosamente, actualizar la UI
+            const channelElement = document.querySelector(`[data-channel-id="${channelId}"]`);
+            if (channelElement) {
+                const soloButton = channelElement.querySelector('.solo-button');
+                if (soloButton) {
+                    soloButton.classList.add('on');
+                    soloButton.textContent = 'ON';
+                }
+            }
+            // Actualizar el estado
+            await getAllChannelStatus();
+
+     
+
+            // Mostrar mensaje de éxito
+            console.log(`Canal ${data.channelName} activado exitosamente`);
+        } else {
+            throw new Error(data.message || 'Error al cambiar el estado del canal');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        // Revertir el cambio visual si hubo error
+        soloButton.classList.remove('on');
+        soloButton.textContent = 'OFF';
+        alert(`Error al cambiar el estado del canal ${channelId}: ${error.message}`);
+    }
+}
+
+async function SendButtonCommandDeactivateSolo(channelId) {
+    try {
+        // Primero, hacer la llamada a la API REST
+        const response = await fetch(`/api/volume/unmute-channels`, {
+            method: 'DELETE',
+            headers: {
+            'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Error al crear el thread del canal');
+        }
+
+        const data = await response.json();
+        
+        if (data.success) {
+            // Si la API responde exitosamente, actualizar la UI
+            const channelElement = document.querySelector(`[data-channel-id="${channelId}"]`);
+            if (channelElement) {
+                const soloButton = channelElement.querySelector('.solo-button');
+                if (soloButton) {
+                    soloButton.classList.remove('on');
+                    soloButton.textContent = 'OFF';
+                }
+            }
+            // Actualizar el estado
+            await getAllChannelStatus();
+
+       
+
+            // Mostrar mensaje de éxito
+            console.log(`Canal ${channelId} desactivado exitosamente`);
+        } else {
+            throw new Error(data.message || 'Error al cambiar el estado del canal');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        // Revertir el cambio visual si hubo error
+        soloButton.classList.remove('on');
+        soloButton.textContent = 'OFF';
+        alert(`Error al cambiar el estado del canal ${channelId}: ${error.message}`);
+    }
+}
+
+
 // Función para cambiar el estado de un canal
 async function toggleChannel(channelId) {
     const channelElement = document.querySelector(`[data-channel-id="${channelId}"]`);
@@ -412,6 +510,20 @@ async function toggleChannel(channelId) {
         SendButtonCommandDeactivate(channelId);
 }
 
+
+// Función para cambiar el estado de un canal
+async function toggleSolo(channelId) {
+    const channelElement = document.querySelector(`[data-channel-id="${channelId}"]`);
+    if (!channelElement) return;
+
+    const powerButton = channelElement.querySelector('.solo-button');
+    const isEnabled = !powerButton.classList.contains('on'); // Verificar estado actual antes de cambiar
+
+    if(isEnabled)
+        SendButtonCommandSolo(channelId);
+    else
+        SendButtonCommandDeactivateSolo(channelId);
+}
 
 // Funciones auxiliares para el manejo de eventos de threads
 function updateChannelStatus(channelId, isRunning) {
