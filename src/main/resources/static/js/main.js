@@ -454,7 +454,7 @@ async function SendButtonCommandDeactivateSolo(channelId) {
     try {
         // Primero, hacer la llamada a la API REST
         const response = await fetch(`/api/volume/unmute-channels`, {
-            method: 'DELETE',
+            method: 'PUT',
             headers: {
             'Content-Type': 'application/json'
             }
@@ -518,7 +518,7 @@ async function toggleSolo(channelId) {
 
     const powerButton = channelElement.querySelector('.solo-button');
     const isEnabled = !powerButton.classList.contains('on'); // Verificar estado actual antes de cambiar
-
+    console.log('Estado actual del botón Solo:', isEnabled);
     if(isEnabled)
         SendButtonCommandSolo(channelId);
     else

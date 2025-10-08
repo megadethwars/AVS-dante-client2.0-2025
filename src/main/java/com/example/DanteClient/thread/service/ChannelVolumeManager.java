@@ -159,7 +159,7 @@ public class ChannelVolumeManager {
                 if (threadService.isThreadActive(id)) {
                     // Solo silenciar si el volumen no es 0
                     int currentVolume = channelVolumes.get(id);
-                    if (currentVolume != 0) {
+                    //if (currentVolume != 0) {
                         previousVolumes.put(id, currentVolume); // Guardar volumen anterior
                         setVolume(id, 0); // Usar el método setVolume para mantener consistencia
                         ChannelThread channelThread = threadService.getThreadInfo(id);
@@ -167,15 +167,15 @@ public class ChannelVolumeManager {
                             channelThread.setVolume(0);
                         }
                         threadActiveStates.put(id, false); // Marcar como muteado
-                        muted = true;
                         System.out.println("Canal " + id + " (activo) ha sido silenciado. Volumen anterior: " + currentVolume);
-                    }
+                    //}
                 } else {
                     threadActiveStates.put(id, false); // Marcar como inactivo
                     System.out.println("Canal " + id + " está inactivo, no se silencia.");
                 }
             } else {
                 threadActiveStates.put(id, true); // Marcar el canal no muteado como activo
+                muted = true; // Asegurar que al menos uno está activo
             }
         }
         
@@ -222,6 +222,9 @@ public class ChannelVolumeManager {
                     channelThread.setVolume(previousVolume);
                 }
                 threadActiveStates.put(id, false); 
+               
+                System.out.println(threadActiveStates.get(id).toString());
+                System.out.println(previousVolumes.toString());
                 restored = true;
                 System.out.println("Canal " + id + " restaurado a volumen: " + previousVolume);
             } else {
@@ -230,6 +233,11 @@ public class ChannelVolumeManager {
             }
         }
         
+        // Asegurar que todos los estados estén en false
+        for (Integer channelId : threadActiveStates.keySet()) {
+            threadActiveStates.put(channelId, false);
+        }
+
         if (restored) {
             System.out.println("Se han restaurado los volúmenes de los canales previamente silenciados.");
         } else {
