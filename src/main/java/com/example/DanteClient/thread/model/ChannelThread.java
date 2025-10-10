@@ -8,6 +8,7 @@ import java.net.MulticastSocket;
 import java.net.NetworkInterface;
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -59,6 +60,8 @@ public class ChannelThread {
     short y;
     short contador = 0,s3;
     float pot = 1;
+    int canal=0;
+    private int packetCount = 0; // Contador de paquetes recibidos
 
     public ChannelThread(int channelId, String channelName, CompletableFuture<Void> future) {
         this.channelId = channelId;
@@ -191,7 +194,8 @@ public class ChannelThread {
         // init audio
         format = new AudioFormat(frequency, 16, 2, true, true);
         sonido=new byte[chunkSize*2];
-        buffer=new byte[8192];
+        //buffer=new byte[chunkSize*chunkSize*2];
+        buffer=new byte[256];
         DataLine.Info info=new DataLine.Info(SourceDataLine.class,format);
 
 
@@ -229,9 +233,11 @@ public class ChannelThread {
     private void initMulticastHandShake(){
         try{
             if(Network.equals("default")){
-            socket=new MulticastSocket(Integer.parseInt(serverPort));
+            socket=new MulticastSocket(Integer.parseInt(multicastPort));
             grupo=InetAddress.getByName(multicastAddress);
             
+            NetworkInterface nif = NetworkInterface.getByInetAddress(InetAddress.getByName(multicastAddress));
+            //socket.joinGroup(new InetSocketAddress(grupo, Integer.parseInt(multicastPort)), nif);
             socket.joinGroup(grupo);
             socket.setSoTimeout(5000);
             
@@ -277,14 +283,24 @@ public class ChannelThread {
             
             }
             }catch(Exception ex){
-                System.out.println("error de socket");
+                System.err.println("Error de socket en canal " + channelId + ": " + ex.getMessage());
+                ex.printStackTrace();
+                updateStatus("ERROR");
+                updateCurrentTask("Error de conexión multicast: " + ex.getMessage());
+                
+                // Información adicional de diagnóstico
+                System.err.println("Intentando conectar a: " + multicastAddress + ":" + multicastPort);
+                System.err.println("Tipo de error: " + ex.getClass().getSimpleName());
+                
+                // No continuar si hay error de socket
+                return;
             }
             
             
        
-            PaqueteCliente = new DatagramPacket(buffer,0,buffer.length,grupo,Integer.parseInt(serverPort));
+            PaqueteCliente = new DatagramPacket(buffer,0,buffer.length,grupo,Integer.parseInt(multicastPort));
             
-            int canal=selectorAudio(channelId);
+            canal=selectorAudio(channelId);
             sonido=new byte[chunkSize*2];
             //cliclo while de recepcion de audio
            
@@ -302,51 +318,84 @@ public class ChannelThread {
     private void ProcessAudio() throws Exception {
         try {
             socket.receive(PaqueteCliente);
-               
-            for(int x=0;x<(chunkSize*2);x+=2){
-                sonido[x+1]= (PaqueteCliente.getData()[x+channelId]);
-                sonido[x]= (PaqueteCliente.getData()[x+1+channelId]);
-                
-                b1=sonido[x];
-                b2=sonido[x+1];
-          
-                y=ByteBuffer.wrap(new byte[]{b1,b2}).getShort();
-                
-                y/=pot;
-                
-                y*=volume/10.0;
-               
-                s3=y;
-                b2=(byte)s3;   ///lsb
-                s3>>=8;
-                s3=(short) (s3);  ////msb
-                b1=(byte)s3;
-             
-                sonido[x]=b1;          /////msb
-                sonido[x+1]=b2;            
-            }
-           
-            sourceline.write(sonido,0,sonido.length);
+            packetCount++; // Incrementar contador de paquetes
+            byte[] rawData = PaqueteCliente.getData();
             
-        } catch (java.net.SocketException e) {
-            if (!running.get()) {
-                // Es una interrupción normal del socket por stop()
-                System.out.println("Socket cerrado durante la detención del thread - Canal " + channelId);
-                return;
+            // Debug: mostrar datos RAW cada 100 paquetes
+            if (packetCount % 100 == 0) {
+                System.out.println("Canal " + canal + " - Paquete " + packetCount + ": " + Arrays.toString(rawData));
             }
-            // Si running es true, entonces es un error real
-            System.out.println("Error de socket en canal " + channelId + ": " + e.getMessage());
-            updateStatus("ERROR");
-            updateCurrentTask("Error de socket: " + e.getMessage());
-            throw e;
+            
+            // Procesar formato PLANAR (128 samples = 64 por canal)
+            processAudioPlanar(rawData);
+            
         } catch (Exception e) {
-            if (running.get()) {
-                System.out.println("Error al procesar audio en canal " + channelId + ": " + e.getMessage());
-                updateStatus("ERROR");
-                updateCurrentTask("Error al procesar audio: " + e.getMessage());
-                throw e;
-            }
+            System.err.println("Error procesando audio en canal " + canal + ": " + e.getMessage());
+            throw e;
         }
+    }
+    
+    /**
+     * Procesa audio en formato PLANAR: Canal1[64 samples] + Canal2[64 samples]
+     */
+    private void processAudioPlanar(byte[] rawData) {
+        if (rawData.length < 256) {
+            System.err.println("Datos insuficientes: " + rawData.length + " bytes (esperados 256)");
+            return;
+        }
+        
+        // Convertir bytes a samples de 16 bits
+        short[] allSamples = new short[128]; // 256 bytes / 2 = 128 samples
+        
+        for (int i = 0; i < 128; i++) {
+            // Little-endian: byte bajo + byte alto
+            int byteIndex = i * 2;
+            int lowByte = rawData[byteIndex] & 0xFF;
+            int highByte = rawData[byteIndex + 1] & 0xFF;
+            allSamples[i] = (short)((highByte << 8) | lowByte);
+        }
+        
+        // Separar canales (formato PLANAR)
+        short[] canalL = new short[64]; // Samples 0-63
+        short[] canalR = new short[64]; // Samples 64-127
+        
+        System.arraycopy(allSamples, 0, canalL, 0, 64);    // Canal L
+        System.arraycopy(allSamples, 64, canalR, 0, 64);   // Canal R
+        
+        // Debug: mostrar algunos samples procesados
+        if (packetCount % 100 == 0) {
+            System.out.println("Canal L (primeros 5): " + Arrays.toString(Arrays.copyOf(canalL, 5)));
+            System.out.println("Canal R (primeros 5): " + Arrays.toString(Arrays.copyOf(canalR, 5)));
+        }
+        
+        // Crear audio estéreo intercalado para reproducción
+        byte[] audioStereo = createStereoAudio(canalL, canalR);
+        
+        // Reproducir audio
+        if (sourceline != null && sourceline.isOpen()) {
+            sourceline.write(audioStereo, 0, audioStereo.length);
+        }
+    }
+    
+    /**
+     * Convierte canales separados a formato estéreo intercalado
+     */
+    private byte[] createStereoAudio(short[] canalL, short[] canalR) {
+        byte[] stereoBuffer = new byte[256]; // 64 samples * 2 canales * 2 bytes = 256 bytes
+        
+        for (int i = 0; i < 64; i++) {
+            // Sample canal L
+            short sampleL = (short)(canalL[i] * volume / 100.0); // Aplicar volumen
+            stereoBuffer[i * 4] = (byte)(sampleL & 0xFF);        // L low byte
+            stereoBuffer[i * 4 + 1] = (byte)((sampleL >> 8) & 0xFF); // L high byte
+            
+            // Sample canal R  
+            short sampleR = (short)(canalR[i] * volume / 100.0); // Aplicar volumen
+            stereoBuffer[i * 4 + 2] = (byte)(sampleR & 0xFF);        // R low byte
+            stereoBuffer[i * 4 + 3] = (byte)((sampleR >> 8) & 0xFF); // R high byte
+        }
+        
+        return stereoBuffer;
     }
 
     private void FinishAudio(){
@@ -396,9 +445,14 @@ public class ChannelThread {
                 //     Thread.sleep(1000); // Esperar si está silenciado
                 // }
 
-                 updateCurrentTask("Procesando audio - Vol: " + volume + "%");
-                 System.out.println("Procesando audio - Vol: " + volume + "%");
-                 Thread.sleep(1000);
+
+
+                ProcessAudio();
+
+
+                 //updateCurrentTask("Procesando audio - Vol: " + volume + "%");
+                 //System.out.println("Procesando audio - Vol: " + volume + "%");
+                 //Thread.sleep(1000);
             }
             
             updateStatus("FINISHED");

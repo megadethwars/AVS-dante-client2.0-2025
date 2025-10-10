@@ -1,9 +1,9 @@
 {
   "server" : "192.168.1.100",
   "port" : "8080",
-  "multicast_address" : "224.0.0.1",
-  "multicast_port" : "5000",
-  "chunk_size" : "1024",
+  "multicast_address" : "224.0.0.3",
+  "multicast_port" : "5001",
+  "chunk_size" : "64",
   "timeout" : "5000",
   "channel_numbers" : 64,
   "frequency" : 44100,
