@@ -277,6 +277,15 @@ function updateChannelsUI(channels) {
         if (channel) {
             html += `
                 <div class="channel-item" data-channel-id="${channel.id}">
+                    <img 
+                        class="channel-image" 
+                        src="/images/${channel.id}.jpg" 
+                        alt="${channel.name || 'Canal ' + channel.id}" 
+                        loading="lazy" 
+                        onerror="this.src='/images/error.jpg';" 
+                        id="channel-img-${channel.id}"
+                    />
+                    
                     <h3>${channel.name || 'Canal ' + channel.id}</h3>
                     <div class="channel-controls">
                         <button 
@@ -749,3 +758,15 @@ clearCacheBtn.style.right = '20px';
 clearCacheBtn.style.zIndex = '9999';
 clearCacheBtn.onclick = clearSiteCache;
 document.body.appendChild(clearCacheBtn);
+
+// Ajuste dinámico de tamaño de imágenes de canal
+function ajustarTamanioImagenesCanal() {
+    const ancho = Math.floor(window.innerWidth / 50);
+    const alto = ancho * 2;
+    document.querySelectorAll('.channel-image').forEach(img => {
+        img.width = 100;
+        img.height = 50;
+    });
+}
+//window.addEventListener('resize', ajustarTamanioImagenesCanal);
+//window.addEventListener('load', ajustarTamanioImagenesCanal);

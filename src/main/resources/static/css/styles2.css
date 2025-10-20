@@ -199,6 +199,14 @@ button:hover {
     font-size: 0.9em;
 }
 
+.channel-image {
+    width: 8vw;   /* un décimo del ancho de la ventana */
+    height: 16vw;  /* doble del ancho de la ventana */
+    object-fit: cover;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
 
 
 .solo-button {

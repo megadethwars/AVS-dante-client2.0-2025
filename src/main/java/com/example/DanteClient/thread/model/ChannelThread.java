@@ -194,8 +194,8 @@ public class ChannelThread {
         // init audio
         format = new AudioFormat(frequency, 16, 2, true, true);
         sonido=new byte[chunkSize*2];
-        //buffer=new byte[chunkSize*chunkSize*2];
-        buffer=new byte[256];
+        buffer=new byte[chunkSize*chunkSize*2];
+        //buffer=new byte[256];
         DataLine.Info info=new DataLine.Info(SourceDataLine.class,format);
 
 
@@ -308,7 +308,7 @@ public class ChannelThread {
             System.out.println("Iniciando audio por canal  " + channelId);
           
             System.out.println(chunkSize);
-            System.out.println("canal"+canal);
+            System.out.println("SECCION DE CANAL -"+canal);
             System.out.println(sonido.length);
             
           
@@ -318,13 +318,13 @@ public class ChannelThread {
     private void ProcessAudio() throws Exception {
         try {
             socket.receive(PaqueteCliente);
-            packetCount++; // Incrementar contador de paquetes
+            //packetCount++; // Incrementar contador de paquetes
             byte[] rawData = PaqueteCliente.getData();
             
             // Debug: mostrar datos RAW cada 100 paquetes
-            if (packetCount % 100 == 0) {
-                System.out.println("Canal " + canal + " - Paquete " + packetCount + ": " + Arrays.toString(rawData));
-            }
+           // if (packetCount % 100 == 0) {
+                //System.out.println("Canal " + canal + " - Paquete " + packetCount + ": " + Arrays.toString(rawData));
+           // }
             
             // Procesar formato PLANAR (128 samples = 64 por canal)
             processAudioPlanar(rawData);
@@ -337,51 +337,98 @@ public class ChannelThread {
     
     /**
      * Procesa audio en formato PLANAR: Canal1[64 samples] + Canal2[64 samples]
+     * Cada canal se maneja como MONO independiente
      */
     private void processAudioPlanar(byte[] rawData) {
-        if (rawData.length < 256) {
+        if (rawData.length < 10) {
             System.err.println("Datos insuficientes: " + rawData.length + " bytes (esperados 256)");
             return;
         }
         
         // Convertir bytes a samples de 16 bits
-        short[] allSamples = new short[128]; // 256 bytes / 2 = 128 samples
-        
-        for (int i = 0; i < 128; i++) {
+        short[] allSamples = new short[chunkSize*2]; // 256 bytes / 2 = 128 samples
+
+        for (int i = 0; i < chunkSize*2; i++) {
             // Little-endian: byte bajo + byte alto
             int byteIndex = i * 2;
-            int lowByte = rawData[byteIndex] & 0xFF;
-            int highByte = rawData[byteIndex + 1] & 0xFF;
+            int lowByte = rawData[byteIndex+canal] & 0xFF;
+            int highByte = rawData[byteIndex + 1+canal] & 0xFF;
             allSamples[i] = (short)((highByte << 8) | lowByte);
         }
         
         // Separar canales (formato PLANAR)
-        short[] canalL = new short[64]; // Samples 0-63
-        short[] canalR = new short[64]; // Samples 64-127
+        short[] canal1 = new short[chunkSize]; // Samples 0-63 (Canal 1)
+        short[] canal2 = new short[chunkSize]; // Samples 64-127 (Canal 2)
         
-        System.arraycopy(allSamples, 0, canalL, 0, 64);    // Canal L
-        System.arraycopy(allSamples, 64, canalR, 0, 64);   // Canal R
+        System.arraycopy(allSamples, 0, canal1, 0, chunkSize);     // Canal 1
+        System.arraycopy(allSamples, chunkSize, canal2, 0, chunkSize); // Canal 2
         
         // Debug: mostrar algunos samples procesados
-        if (packetCount % 100 == 0) {
-            System.out.println("Canal L (primeros 5): " + Arrays.toString(Arrays.copyOf(canalL, 5)));
-            System.out.println("Canal R (primeros 5): " + Arrays.toString(Arrays.copyOf(canalR, 5)));
-        }
+        //if (packetCount % 100 == 0) {
+        //    System.out.println("Canal " + canal + " - Canal1 (primeros 5): " + Arrays.toString(Arrays.copyOf(canal1, 5)));
+        //    System.out.println("Canal " + canal + " - Canal2 (primeros 5): " + Arrays.toString(Arrays.copyOf(canal2, 5)));
+        //}
         
-        // Crear audio estéreo intercalado para reproducción
-        byte[] audioStereo = createStereoAudio(canalL, canalR);
+        // Seleccionar el canal específico basado en el ID del canal
+        //short[] canalSeleccionado = seleccionarCanal(canal1, canal2);
         
+        // Convertir el canal MONO a bytes para reproducción
+        byte[] audioMono = convertirMonoABytes(canal1);
+
         // Reproducir audio
         if (sourceline != null && sourceline.isOpen()) {
-            sourceline.write(audioStereo, 0, audioStereo.length);
+            sourceline.write(audioMono, 0, audioMono.length);
         }
     }
     
     /**
-     * Convierte canales separados a formato estéreo intercalado
+     * Selecciona qué canal usar basado en el ID del canal
+     * Canal impar (1,3,5...) = Canal 1, Canal par (2,4,6...) = Canal 2
      */
+    private short[] seleccionarCanal(short[] canal1, short[] canal2) {
+        // Si el ID del canal es impar, usar canal1; si es par, usar canal2
+        if (canal % 2 == 1) {
+            System.out.println("Seleccionado Canal 1 para canal ID " + canal);
+            return canal1;
+        } else {
+            System.out.println("Seleccionado Canal 2 para canal ID " + canal);
+            return canal2;
+        }
+    }
+    
+    /**
+     * Convierte samples de audio MONO a bytes para reproducción
+     */
+    private byte[] convertirMonoABytes(short[] samples) {
+        // Para MONO: necesitamos duplicar cada sample para crear pseudo-estéreo
+        // o configurar la línea de audio como MONO
+        byte[] monoBuffer = new byte[samples.length * 4]; // *4 porque duplicamos para estéreo
+        
+        for (int i = 0; i < samples.length; i++) {
+            // Aplicar volumen
+            short sample = (short)(samples[i] * volume / 100.0);
+            
+            // Escribir sample en ambos canales (L y R iguales para compatibilidad)
+            int byteIndex = i * 4;
+            
+            // Canal L (mismo sample)
+            monoBuffer[byteIndex] = (byte)(sample & 0xFF);        // L low byte
+            monoBuffer[byteIndex + 1] = (byte)((sample >> 8) & 0xFF); // L high byte
+            
+            // Canal R (mismo sample para compatibilidad con dispositivos estéreo)
+            monoBuffer[byteIndex + 2] = (byte)(sample & 0xFF);        // R low byte  
+            monoBuffer[byteIndex + 3] = (byte)((sample >> 8) & 0xFF); // R high byte
+        }
+        
+        return monoBuffer;
+    }
+    
+    /**
+     * Método auxiliar para crear estéreo real (no usado actualmente pero mantenido)
+     */
+    @SuppressWarnings("unused")
     private byte[] createStereoAudio(short[] canalL, short[] canalR) {
-        byte[] stereoBuffer = new byte[256]; // 64 samples * 2 canales * 2 bytes = 256 bytes
+        byte[] stereoBuffer = new byte[chunkSize * 4]; // 64 samples * 2 canales * 2 bytes = 256 bytes
         
         for (int i = 0; i < 64; i++) {
             // Sample canal L
